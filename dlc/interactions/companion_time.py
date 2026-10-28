@@ -11,6 +11,8 @@ from datetime import date
 from stats import data_dir
 
 DAILY_MAX = 3
+CALM = ("idle", "look", "look_left", "content", "happy")
+BUSY = {"drag", "fling", "walk", "sulk", "food_fx", "link", "spin", "danika", "plugin"}
 LINES = ["你…一直在啊。", "陪了这么久,也、也不是很开心啦。", "哼,一个小时了…你都不嫌我烦吗?",
          "…谢谢你一直开着我。才、才不是想说这个!", "这么久都在,算你有点良心。"]
 
@@ -61,10 +63,7 @@ class CompanionTime:
 
     def _busy(self):
         p = self.pet
-        dan = getattr(p, "danika", None)
-        return (p.state not in ("idle", "look", "look_left", "content", "happy") or p._dragging or p.fling
-                or p.walk or p.sulking() or p.food_fx is not None or p.link_busy or p.spin_rem > 0
-                or (dan is not None and dan.active()))
+        return p.state not in CALM or bool(p.activities() & BUSY)
 
     def step(self, t):
         p = self.pet

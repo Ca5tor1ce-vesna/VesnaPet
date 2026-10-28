@@ -11,7 +11,6 @@
 台词来源标 src="water", 语音插件不会播。推 "watered"(dodged, asleep, forced)。
 """
 import random
-import sys
 import time
 
 from PySide6.QtCore import QPointF, Qt
@@ -35,6 +34,7 @@ CALM_LINE = "…就、就这一次!下次绝对不饶你!"
 AGAIN_LINES = ["你还想来?!", "想都别想!!"]
 NOSPIN_LINES = ["别想转我！"]
 NOSPIN_GAP = 4.0
+BUSY = {"drag", "fling", "throw", "food_fx", "edge", "spin", "danika", "vomit"}   # 这些时候浇不了
 
 
 class Water:
@@ -50,13 +50,18 @@ class Water:
         self.rage = None           # 究极生气: dict(t0, next_fx, next_say, next_stomp, pets)
         self._glow_cache = {}
         self.nospin_next = 0.0
-        mod = sys.modules.get(type(pet).__module__)
-        self.FURY = float(getattr(mod, "DRAG_HOLD_FURY", 13.5))
+
+    def busy(self):
+        if self.force is not None:
+            return "water_force"
+        if self.rage is not None or self.rage_pending:
+            return "rage"
+        return "water" if self.job is not None else None
 
     # ----- 强行浇水 -----
     def on_mouse_press(self, e):
         p = self.pet
-        if not p._dragging or e.button() not in (Qt.RightButton, Qt.MiddleButton):
+        if not p.dragging or e.button() not in (Qt.RightButton, Qt.MiddleButton):
             return False
         now = time.monotonic()
         if self.force is not None:
@@ -72,22 +77,18 @@ class Water:
         self.force = dict(t0=now, next=now, say=now + 0.15)
         p.gain(-3, quiet=True)
         p.emit_event("watered", dodged=False, asleep=p.state == "sleep", forced=True)
-        if p.state == "sleep":
-            p._wake_why = "water"
-        p.set_state("angry")
+        p.set_state("angry", why="water")
         return True
 
     def on_context_menu(self, e):
-        return bool(self.pet._dragging or self.force is not None)     # 拖着时不弹菜单
+        return bool(self.pet.dragging or self.force is not None)     # 拖着时不弹菜单
 
     def _step_force(self, t):
         p = self.pet
         f = self.force
         el = t - f["t0"]
-        if el < FORCE_SEC and p._dragging:
-            # 原版挣扎抖动: 把拖住时长拨到「激烈挣扎」段, 阶段标成已说过, 原版就只抖不说话
-            p._drag_hold_t0 = f["t0"] - self.FURY - 0.2
-            p._drag_hold_stage = 4
+        if el < FORCE_SEC and p.dragging:
+            p.force_struggle(3, since=f["t0"])     # 原版「激烈挣扎」的抖法, 只抖不说话
             if t >= f["next"]:
                 f["next"] = t + 0.04
                 hp = p.head_point()
@@ -102,9 +103,7 @@ class Water:
                 p.set_state("angry")
             return
         # 浇完(或提前松手)
-        if p._dragging:
-            p._drag_hold_t0 = t                    # 回到刚拿起: 原版挣扎重新计时
-            p._drag_hold_stage = 0
+        p.force_struggle(0, since=t)               # 回到刚拿起: 原版挣扎重新计时(没在拖则无事)
         self.force = None
         self.rage_pending = True
 
@@ -123,11 +122,11 @@ class Water:
         r = self.rage
         if t - r["t0"] >= RAGE_SEC:
             self.rage = None
-            if p.state == "angry" and not p._dragging:
+            if p.state == "angry" and not p.dragging:
                 p.set_state("idle")
                 p.burst("sweat", 1)
             return
-        if p._dragging or p.fling is not None:
+        if p.dragging or p.fling is not None:
             return
         if p.state not in ("angry", "sleep"):
             p.set_state("angry")
@@ -138,7 +137,7 @@ class Water:
                 p.burst("steam", 3, at=p.head_point(), bias=(0, 0))
         if t >= r["next_stomp"]:
             r["next_stomp"] = t + random.uniform(4.0, 7.0)
-            if p._landed and not p.edge:
+            if p.landed and not p.edge:
                 p.do_jump(False)
                 p.burst("dust", 4, at=p.foot_point(), bias=(0, 0))
             else:
@@ -212,18 +211,7 @@ class Water:
 
     # ----- 判断 -----
     def _busy(self):
-        p = self.pet
-        if p._dragging or p.fling is not None or getattr(p, "_throw", None) is not None:
-            return True
-        if p.food_fx is not None or p.edge or p.spin_rem > 0 or getattr(p, "_spin_overspin", False):
-            return True
-        dan = getattr(p, "danika", None)
-        if dan is not None and dan.active():
-            return True
-        for pl in getattr(p._ix, "plugins", ()):
-            if pl is not self and type(pl).__name__ == "VomitFx" and getattr(pl, "active", False):
-                return True
-        return False
+        return bool(self.pet.activities() & BUSY)
 
     def _say(self, pool, dur=2.6, tone="alert"):
         self.pet.say(random.choice(pool), force=True, duration=dur, tone=tone, src="water")
@@ -256,7 +244,7 @@ class Water:
     def step(self, t):
         if self.force is not None:
             self._step_force(t)
-        if self.rage_pending and not self.pet._dragging and self.pet.fling is None:
+        if self.rage_pending and not self.pet.dragging and self.pet.fling is None:
             self._start_rage(t)
         if self.rage is not None:
             self._step_rage(t)
@@ -272,7 +260,7 @@ class Water:
         if not j["asleep"]:
             if not j["moved"] and t >= j["dodge_at"]:
                 j["moved"] = True
-                if p._dragging or p.fling is not None:          # 这时被抓/被丢: 算了
+                if p.dragging or p.fling is not None:           # 这时被抓/被丢: 算了
                     self.job = None
                     return
                 self._start_dodge()
@@ -289,8 +277,7 @@ class Water:
 
     def _start_dodge(self):
         p = self.pet
-        vis = p._normal_visible_rect()
-        g = p._screen_for_rect(vis).availableGeometry()
+        g = p.screen_rect()
         dist = p.char_w * random.uniform(1.1, 1.5)
         lo = g.left() - p.pad_x + 4
         hi = g.left() + g.width() - p.width() + p.pad_x - 4
@@ -306,7 +293,7 @@ class Water:
     def _step_dodge(self, t):
         p = self.pet
         d = self.job["dodge"]
-        if p._dragging or p.fling is not None:
+        if p.dragging or p.fling is not None:
             self.job = None
             return
         u = min(1.0, (t - d["t0"]) / 0.22)
@@ -331,14 +318,13 @@ class Water:
         p.burst("sweat", 8, at=hp, bias=(0, 0))       # 水花
         p.burst("drop", 3, at=hp, bias=(0, 0))
         p.burst("puff", 3, at=hp, bias=(0, 0))
-        p._wake_why = "water"
-        p.set_state("surprised", 0.5)
+        p.set_state("surprised", 0.5, why="water")
         p.kick(4.0)
         p.tilt += random.choice((-1, 1)) * 6
         p.gain(-1, quiet=True)
 
         def angry():
-            if p.state == "sleep" or p._dragging or p.fling is not None:
+            if p.state == "sleep" or p.dragging or p.fling is not None:
                 return
             p.set_state("angry", 3.0)
             p.sfx.play("hmph")

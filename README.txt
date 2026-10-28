@@ -75,7 +75,8 @@
     - {"v":2,"cmd":"subscribe"} (或纯文本 subscribe): 这条连接之后会收到事件推送行
       {"v":2,"ev":"click","t":1760000000.0, ...}。事件有 click/double_click/pet/drag_start/drag_end/
       throw/bonk/throw_land/spin_start/spin_end/dizzy/feed/sleep/wake/state/say/idle_action/sneak_caught/
-      sulk/makeup/level_up/danika_visit/danika_end/butterfly/food_effect_start/food_effect_end, 字段见 live_link.py 顶部说明。
+      sulk/makeup/level_up/danika_visit/danika_end/butterfly/food_effect_start/food_effect_end/
+      rps/fortune/focus_start/focus_end/reminder, 字段见 live_link.py 顶部说明或 docs\接口规范.md。
     - {"v":2,"cmd":"say","text":"...","expr":"happy","sec":4}: 让她头顶冒一句气泡, 可选临时换表情
       (只认已有表情, 不认识就忽略; sec 夹在 1–8 秒, 到时回原状态)。文本最多 60 字;
       同一连接 1.2 秒内只能说一句(否则回 err "rate"); 她在睡觉/被拖/被转/被丢/晕/达妮卡来访时
@@ -123,6 +124,8 @@
 
 【互动扩展 dlc/interactions/】(2026-10-12)
 启动时可选加载 dlc/interactions/*.py(interaction_hooks.py), 目录不存在则完全不影响原版。
+写插件前先看 docs\接口规范.md(钩子、可用的公开方法、她「在忙什么」的活动表、自动行为让路的互动矩阵、事件表)。
+插件只用公开接口, 不碰下划线属性; 检查: python tools\check_plugins.py。插件可实现 on_event 收全部事件、busy() 报自己的活动。
 vomit.py「转吐了」: 滚轮转到最晕(转太多)、停下晕完 2.4 秒后, 干呕 1.4s + 吐 2.2s, 冒 2 句台词;
 饱食度 -20(最低0)、好感 -1, 推事件 "vomit"; 之后 60 秒内再转只晕(走原版生气)。
 图: dlc/interactions/vomit_pre.png / vomit.png, 缺图时用晕眩立绘泛绿+抖动。

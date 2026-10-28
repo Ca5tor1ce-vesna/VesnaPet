@@ -39,14 +39,12 @@ class Comfort:
         self.step(now)
         if not self.t0 or self.done or now - self.t0 > WINDOW:
             return False
-        if p._dragging or p.fling:
+        if p.dragging or p.fling:
             return False
         self.done = True
         sulk = p.sulking()
-        if sulk:                                   # 原版 _end_sulk 的收尾, 但不加它的 +1
-            p._sulk_until = 0.0
-            p._sulk_calm = 0
-            p._throws.clear()
+        if sulk:                                   # 悄悄消气: 不走原版 _end_sulk 的 +1 和台词
+            p.clear_sulk()
         p.set_state("shy", 2.6)
         p.kick(-1.2)
         p.burst("heart", 3)

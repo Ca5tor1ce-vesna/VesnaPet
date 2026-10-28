@@ -71,6 +71,16 @@ BUTTERFLY_LINE = {
     "landed": "蝴蝶落在了她头上",
     "giveup": "她追蝴蝶没追上，有点失落",
 }
+RPS_LINE = {
+    "win": "你和她猜拳赢了，她不服气（互动）",
+    "lose": "你和她猜拳输了，她得意洋洋（互动）",
+    "draw": "你和她猜拳打平了（互动）",
+}
+REMINDER_LINE = {
+    "water": "她提醒你喝水",
+    "sit": "她提醒你起来活动活动",
+    "hungry": "她说肚子饿了",
+}
 
 
 FOOD_FX_LINE = {
@@ -182,6 +192,16 @@ def event_line(ev):
         return "达妮卡走了"
     if name == "butterfly":
         return BUTTERFLY_LINE.get(ev.get("stage"))
+    if name == "rps":
+        return RPS_LINE.get(ev.get("result"))
+    if name == "fortune":
+        return f"你们抽了今日运势，是「{ev.get('tier') or '?'}」（互动）" if ev.get("fresh") else None
+    if name == "focus_start":
+        return f"你开始专注 {ev.get('minutes') or '?'} 分钟，她安静陪着（互动）"
+    if name == "focus_end":
+        return "专注完成了，她在为你庆祝" if ev.get("done") else "你提前结束了专注"
+    if name == "reminder":
+        return REMINDER_LINE.get(ev.get("kind"))       # 整点报时不记
     if name == "food_effect_start":
         how = FOOD_FX_LINE.get(ev.get("effect"), "她吃完不太对劲")
         return f"你喂了她{ev.get('name') or '奇怪的东西'}，{how}（整蛊）"

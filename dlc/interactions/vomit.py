@@ -6,7 +6,6 @@
 """
 import math
 import random
-import time
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, Qt
@@ -74,25 +73,19 @@ class VomitFx:
         return pm
 
     # ---- 钩子 ----
+    def busy(self):
+        return "vomit" if self.active else None
+
     def on_spin_queasy(self, now):
         p = self.pet
         if self.active or now < self.cool_until:
             return False
-        if p.state == "sleep" or p._dragging or p.fling or not p.isVisible():
+        if p.state == "sleep" or p.dragging or p.fling or not p.isVisible():
             return False
         self._load_imgs()
         self.active, self.t0, self.stage, self.penalized, self.said = True, now, 0, False, 0
         # 接管原版的转圈收尾: 不再走「晕完生气」, 吐的过程中滚轮被拦住
-        p._spin_angry_done = True
-        p._spin_overspin = False
-        p._spin_posting = False
-        p._spin_meter = 0.0
-        p._spin_stage = 0
-        p._dizzy_extra = 0
-        p._dizzy_until = now + PRE_SEC + VOMIT_SEC + 0.2
-        p._spin_refuse_until = now + PRE_SEC + VOMIT_SEC + 15.0
-        p._spin_recover_at = p._spin_refuse_until + 0.3
-        p._spin_recover_sure = True
+        p.take_over_spin(PRE_SEC + VOMIT_SEC + 0.2, PRE_SEC + VOMIT_SEC + 15.0, now)
         try:
             p.stop_walk()
         except Exception:
@@ -111,7 +104,7 @@ class VomitFx:
             return
         p = self.pet
         el = t - self.t0
-        if p._dragging or p.fling or p.state == "sleep" or not p.isVisible():
+        if p.dragging or p.fling or p.state == "sleep" or not p.isVisible():
             self._finish(t, interrupted=True)
             return
         if p.state != "dizzy":
@@ -161,8 +154,7 @@ class VomitFx:
         self.penalized = True
         p = self.pet
         before = float(p.stats.hunger)
-        after = max(0.0, before - HUNGER_DROP)
-        p.stats.d["hunger"] = after
+        after = p.stats.add_hunger(-HUNGER_DROP)
         p.gain(-1, quiet=True)
         p.stats.inc("vomits")
         try:
@@ -180,7 +172,7 @@ class VomitFx:
         p = self.pet
         if self.penalized:
             self.cool_until = t + COOLDOWN
-        p._dizzy_until = 0.0
+        p.clear_dizzy()
         if not interrupted:
             p.set_state("angry", 2.6)
             p.burst("anger", 1, at=p.head_point() + QPointF(p.char_w * 0.25, -10))

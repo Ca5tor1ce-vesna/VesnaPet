@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
-"""互动扩展接口: 启动时 import <桌宠目录>/dlc/interactions/*.py, 每个模块提供 create(pet, log_fn) -> 插件对象。
+"""互动扩展接口: 启动时 import <桌宠目录>/dlc/interactions/*.py, 每个模块提供 create(pet, log_fn) -> 插件对象
+(返回 None = 不加载)。完整规范见 docs/接口规范.md。
 
-目录不存在 / 没有插件 -> 所有钩子都是空操作, 原版行为不变。插件出错只记 error.log 并被停用。
+目录不存在 / 没有插件 -> 所有钩子都是空操作, 原版行为不变。插件出错只记 error.log 并被停用
+(menu_items / settings_rows 出错只跳过那一项)。插件可设 priority(默认 0), 大的先问; 同级按文件名顺序。
 插件对象可选实现:
+  on_event(name, data)          她身上发生的每个事件(和 live 管道推给 DLC 的同一套, 见文档); 只通知, 返回值不管
+  busy() -> str | None          插件正在进行的活动名(如 "vomit"); 非空时并进 pet.activities(), 原版的自动行为会让路。
+                                不要在 busy() 里调 pet.activities()(会递归)
+  on_pet() -> bool              摸头时先问插件; True = 插件接管(原版摸头效果不执行)
   on_spin_queasy(now) -> bool   转圈转到顶、即将生气时调用; 返回 True 表示插件接管(原版的生气逻辑不执行)
   step(t)                       每帧调用
   paint(key, pm, t) -> (pm, dx) 画立绘前调用, 可替换图/加水平抖动
@@ -50,6 +56,30 @@ class Hub:
             except Exception as e:
                 self._err(name, e, pl)
         return False
+
+    def event(self, name, data):
+        """把一个事件通知给所有插件(不短路); 每个插件拿到自己的一份 data"""
+        for pl in list(self.plugins):
+            f = getattr(pl, "on_event", None)
+            if f is not None:
+                try:
+                    f(name, dict(data))
+                except Exception as e:
+                    self._err("event " + str(name), e, pl)
+
+    def busy(self):
+        """插件报上来的活动名列表; 都闲着就是空列表"""
+        out = []
+        for pl in list(self.plugins):
+            f = getattr(pl, "busy", None)
+            if f is not None:
+                try:
+                    b = f()
+                    if b:
+                        out.append(str(b))
+                except Exception as e:
+                    self._err("busy", e, pl)
+        return out
 
     def step(self, t):
         for pl in list(self.plugins):

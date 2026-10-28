@@ -53,6 +53,8 @@ class Stats:
                 for k, v in loaded.items():
                     if k in self.DEFAULTS and _same_kind(self.DEFAULTS[k], v):
                         self.d[k] = v
+                    elif k not in self.DEFAULTS and isinstance(v, int) and not isinstance(v, bool):
+                        self.d[k] = v          # 插件用 inc() 记的计数(如 vomits): 原样保留, 不然重启就清零
         except Exception:
             pass
         if not isinstance(self.d.get("seen"), list):
@@ -154,6 +156,12 @@ class Stats:
         self.d["hunger"] = min(100.0, self.hunger + amount)
         self.d["feeds"] = int(self.d["feeds"]) + 1
         self.touch()
+
+    def add_hunger(self, delta):
+        """饱腹 +delta(可为负), 夹在 0-100, 返回新值; 不算一次投喂"""
+        self.d["hunger"] = max(0.0, min(100.0, self.hunger + delta))
+        self.touch()
+        return self.hunger
 
     def tick(self, dt):
         self.d["hunger"] = max(0.0, self.hunger - HUNGER_PER_HOUR * dt / 3600.0)

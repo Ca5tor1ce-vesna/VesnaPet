@@ -120,6 +120,33 @@ LIVE_SAY_EXPRS = ("happy", "angry", "surprised", "shy", "love", "content", "chee
 LIVE_SAY_CALM = ("idle", "look", "look_left", "happy", "content", "shy", "wave", "love", "cheer", "surprised",
                  "focus")
 
+# ---------------- 活动 / 互动矩阵 ----------------
+# activities() 返回她此刻在做的事(下面这些名字, 外加插件 busy() 报上来的名字)。
+# 自动行为开始前查 AUTO: 表情不在白名单, 或和拦它的活动有交集, 就不做。改规则只改这张表。
+# docs/接口规范.md 里的互动矩阵就是这张表; 改了这里记得同步文档。
+ACTIVITIES = {
+    "hidden": "隐藏着", "sleep": "睡着", "edge": "贴边探头",
+    "drag": "被拖着", "fling": "甩出去/被丢, 还在飞或滑", "throw": "被丢: 从飞出去到落地抱怨完",
+    "walk": "散步/走过来", "chase": "追蝴蝶", "sneak": "偷吃", "food_fx": "食物包吃后效果",
+    "sulk": "闹别扭", "spin": "滚轮转圈中/转过头待发作", "dizzy": "晕着",
+    "danika": "达妮卡来访", "butterfly": "蝴蝶在场", "panel": "开着面板(小屋/运势/猜拳等)",
+    "focus": "专注计时(未暂停)", "link": "Grok 联动工作中", "plugin": "有插件的 busy() 非空",
+}
+AUTO = {   # 自动行为: (只在这些表情下做, None = 不限; 会拦住它的活动)
+    "idle_action": (("idle",), {"hidden", "drag", "fling", "walk", "food_fx", "plugin"}),
+    "danika_auto": (None, {"edge", "sulk", "danika", "butterfly", "panel", "focus", "link"}),
+    "danika": (None, {"sleep", "edge", "drag", "fling", "walk", "sulk", "link"}),
+    "random_bubble": (("idle", "happy"), {"hidden", "drag", "food_fx", "danika", "focus", "link", "plugin"}),
+    "sneak": (("idle",), {"edge", "drag", "fling", "walk", "sulk", "danika", "butterfly", "focus", "link",
+                          "plugin"}),
+    "auto_butterfly": (None, {"hidden", "sleep", "drag", "food_fx", "butterfly", "focus", "plugin"}),
+    "chase": (None, {"hidden", "sleep", "dizzy", "edge", "drag", "fling", "sulk", "food_fx", "danika", "panel",
+                     "focus", "link", "plugin"}),
+    "fall_asleep": (("idle",), {"drag", "fling", "walk"}),
+    "reminder": (None, {"focus", "sulk"}),
+    "live_say": (None, {"sleep", "dizzy", "drag", "fling", "throw", "spin", "danika", "food_fx", "plugin"}),
+}
+
 TRAY_QSS = """
 QMenu{background:#FFFFFF;border:1px solid #DCE3F1;border-radius:14px;padding:8px 6px;}
 QMenu::item{padding:7px 26px 7px 14px;border-radius:9px;color:#2E3F6E;margin:1px 2px;}
@@ -959,6 +986,7 @@ class PetWindow(QWidget):
             self.wake_up()
         self.set_state("wave", 1.8)
         self.sfx.play("chime")
+        self.emit_event("focus_start", minutes=int(mins))
         self.say(C.FOCUS_START.format(m=mins), force=True)
 
     def focus_remaining(self):
@@ -985,6 +1013,7 @@ class PetWindow(QWidget):
         if self.focus_end is not None:
             self.focus_end = None
             self.focus_paused = False
+            self.emit_event("focus_end", minutes=self.focus_total // 60, done=False)
             self.say("计时结束啦~ 下次继续!", force=True)
 
     def focusing(self):
@@ -1003,6 +1032,7 @@ class PetWindow(QWidget):
             self.focus_end = None
             self.note_interaction()
             self.stats.add_focus(mins)
+            self.emit_event("focus_end", minutes=mins, done=True)
             self.celebrate()
             self.sfx.play("level")
             self.say(random.choice(C.FOCUS_DONE), force=True, duration=6.0, tone="happy")
@@ -1034,6 +1064,7 @@ class PetWindow(QWidget):
         today = date.today().isoformat()
         fresh = self.stats.d.get("fortune_day") != today
         data = C.fortune_for(date.today(), os.environ.get("USERNAME", ""))
+        self.emit_event("fortune", tier=data["tier"], fresh=bool(fresh))
         if fresh:
             self.stats.d["fortune_day"] = today
             self.stats.touch()
@@ -1066,6 +1097,7 @@ class PetWindow(QWidget):
     def on_rps(self, res):
         """res: 从玩家角度 win / lose / draw"""
         self.note_interaction()
+        self.emit_event("rps", result=res)
         if res == "win":
             self.stats.inc("rps_win")
             self.set_state("angry", 1.6)
@@ -1292,9 +1324,7 @@ class PetWindow(QWidget):
 
     def _auto_butterfly(self):
         try:
-            if (self.cfg["butterfly"] and self.isVisible() and not self.focusing() and self.state != "sleep"
-                    and self.food_fx is None
-                    and not self._dragging and not self.butterfly.active()):
+            if self.cfg["butterfly"] and self.can_auto("auto_butterfly"):
                 self.summon_butterfly(auto=True)
         except Exception as e:
             log_error("auto butterfly", e)
@@ -1321,18 +1351,7 @@ class PetWindow(QWidget):
     def _bchase_ok(self):
         if not self.butterfly.active() or self.butterfly.mode not in ("enter", "wander", "land", "leave"):
             return False
-        if not self.isVisible() or not self.cfg["walk"]:
-            return False
-        if self.state in ("sleep", "dizzy") or self.sulking():
-            return False
-        if self.edge or self._dragging or self.fling or self.focusing() or self.link_busy or self.food_fx is not None:
-            return False
-        if getattr(self, "danika", None) is not None and self.danika.active():
-            return False
-        for p in getattr(self, "_panels", {}).values():
-            if p is not None and p.isVisible():
-                return False
-        return True
+        return bool(self.cfg["walk"]) and self.can_auto("chase")
 
     def _chase_butterfly(self):
         try:
@@ -1454,11 +1473,12 @@ class PetWindow(QWidget):
             if not auto:
                 self.say("达妮卡还在呢……", force=True)
             return False
-        if self.edge or self._dragging or self.fling or self.walk or self.state == "sleep" or self.sulking() or self.link_busy:
+        acts = self.activities()
+        if not self.can_auto("danika", acts):
             if not auto:
                 self.say("现在不太方便见客……", force=True)
             return False
-        if any(p is not None and p.isVisible() for p in self._panels.values()):
+        if "panel" in acts:
             if not auto:
                 self.say("先把面板关上嘛~", force=True)
             return False
@@ -2281,9 +2301,12 @@ class PetWindow(QWidget):
              "sleep": -0.8, "stretch": 3.6, "yawn": 1.0, "idle": 0.6, "look": 0.4, "look_left": 0.4,
              "eat": -1.0, "content": -1.4, "shy": -1.2, "focus": 0.5, "love": 2.6}
 
-    def set_state(self, state, duration=None):
+    def set_state(self, state, duration=None, why=None):
+        """换表情; duration 秒后回 idle(闹别扭时回 angry)。why: 从睡着换走时, wake 事件里记的醒来原因"""
         if state not in STATES:
             raise ValueError(state)
+        if why is not None:
+            self._wake_why = why
         prev = self.state
         self.revert_timer.stop()
         if state != prev:
@@ -2296,7 +2319,7 @@ class PetWindow(QWidget):
                 self.burst("orbit", 3, bias=(0, 0))
             if state != "idle":
                 self.gaze = 0
-            if self._live is not None:              # DLC 事件: 状态切换 / 睡着 / 醒来(带原因)
+            if self._live is not None or self._ix.plugins:      # 事件: 状态切换 / 睡着 / 醒来(带原因)
                 self.emit_event("state", **{"from": prev, "to": state})
                 if state == "sleep":
                     self.emit_event("sleep")
@@ -2320,12 +2343,10 @@ class PetWindow(QWidget):
 
     def _idle_action(self):
         try:
-            if self.food_fx is None and self.state == "idle" and not self._dragging and not self.fling and not self.walk and self.isVisible():
-                if (not self.edge and not self.link_busy and not self.focusing() and not self.sulking()
-                        and not self.danika.active() and not self.butterfly.active()
-                        and time.monotonic() >= self._danika_next
-                        and random.random() < DANIKA_IDLE_P
-                        and not any(p is not None and p.isVisible() for p in self._panels.values())):
+            acts = self.activities()
+            if self.can_auto("idle_action", acts):
+                if (self.can_auto("danika_auto", acts) and time.monotonic() >= self._danika_next
+                        and random.random() < DANIKA_IDLE_P):
                     if self.summon_danika(auto=True):
                         self._schedule_happy()
                         return
@@ -2374,9 +2395,7 @@ class PetWindow(QWidget):
         self._schedule_happy()
 
     def _random_bubble(self):
-        if (self.state in ("idle", "happy") and not self._dragging and self.isVisible() and not self.link_busy
-                and self.food_fx is None
-                and not self.focusing() and not self.danika.active()):
+        if self.can_auto("random_bubble"):
             pool = list(C.BUBBLE_TEXTS)
             lv = self.stats.level()[0]
             for k, extra in C.BUBBLE_TEXTS_LV.items():
@@ -2426,7 +2445,7 @@ class PetWindow(QWidget):
         if self.food_fx is not None:
             self.note_interaction()          # 吃后效果期间不累计睡意
             return
-        if self.state != "idle" or self._dragging or self.fling or self.walk:
+        if not self.can_auto("fall_asleep"):
             return
         if self.focusing():
             self.note_interaction()          # 专注时她陪着你, 不睡
@@ -2446,28 +2465,32 @@ class PetWindow(QWidget):
         if self.state == "sleep" or not self.isVisible():
             self._sit_last = now                  # 人不在电脑前: 久坐计时重来
             return
-        if self.focusing() or self.sulking():
+        if not self.can_auto("reminder"):
             return
         wm, sm = int(self.cfg["water_min"]), int(self.cfg["sit_min"])
         if wm > 0 and now - self._water_last >= wm * 60:
             self._water_last = now
+            self.emit_event("reminder", kind="water")
             self.set_state("wave", 1.6)
             self.burst("drop", 3)
             self.say(random.choice(C.WATER_TEXTS), force=True, duration=4.5, tone="info")
             return
         if sm > 0 and now - self._sit_last >= sm * 60:
             self._sit_last = now
+            self.emit_event("reminder", kind="sit")
             self.set_state("stretch", 2.0)
             self.say(random.choice(C.SIT_TEXTS), force=True, duration=4.5, tone="info")
             return
         hr = datetime.now()
         if self.cfg["chime"] and hr.minute == 0 and hr.hour != self._chime_hour:
             self._chime_hour = hr.hour
+            self.emit_event("reminder", kind="chime")
             self.burst("note", 3)
             self.say(f"现在是 {hr.hour} 点整~", force=True, tone="info")
             return
         if self.stats.hunger < 25 and now - self._hungry_last > 1200 and self.state == "idle":
             self._hungry_last = now
+            self.emit_event("reminder", kind="hungry")
             self.burst("emoji", 1, text="🍙")
             self.say(random.choice(C.HUNGRY_TEXTS) + " (右键 → 投喂)", duration=4.5)
 
@@ -2517,13 +2540,7 @@ class PetWindow(QWidget):
 
     def start_sneak_eat(self):
         """闲着时偷偷吃一口; 没被点到就得意, 被点到就害羞否认。"""
-        if self.state != "idle" or self.edge or self._dragging or self.fling or self.walk:
-            return False
-        if self.sulking() or self.focusing() or self.link_busy:
-            return False
-        if getattr(self, "danika", None) is not None and self.danika.active():
-            return False
-        if self.butterfly.active():
+        if not self.can_auto("sneak"):
             return False
         dur = random.uniform(*SNEAK_SEC)
         self._sneak_until = time.monotonic() + dur
@@ -3398,6 +3415,114 @@ class PetWindow(QWidget):
         p.restore()
         return key
 
+    # ----- 插件接口 -----
+    # dlc/interactions 的插件只用这一节、docs/接口规范.md 里列出的方法和字段; 下划线开头的随时可能改。
+    @property
+    def dragging(self):
+        """正被鼠标拖着"""
+        return self._dragging
+
+    @property
+    def landed(self):
+        """不在跳跃的半空中"""
+        return self._landed
+
+    def activities(self):
+        """她此刻在做的事: ACTIVITIES 里的名字, 加上插件 busy() 报上来的名字(此时也带 "plugin")"""
+        now = time.monotonic()
+        a = set()
+        if not self.isVisible():
+            a.add("hidden")
+        if self.state == "sleep":
+            a.add("sleep")
+        if self.edge:
+            a.add("edge")
+        if self._dragging:
+            a.add("drag")
+        if self.fling:
+            a.add("fling")
+        if self._throw is not None:
+            a.add("throw")
+        if self.walk:
+            a.add("walk")
+        if self._bchase is not None:
+            a.add("chase")
+        if self.sneaking():
+            a.add("sneak")
+        if self.food_fx is not None:
+            a.add("food_fx")
+        if self.sulking():
+            a.add("sulk")
+        if self.spin_rem > 0 or self._spin_overspin or self._spin_posting:
+            a.add("spin")
+        if self.state == "dizzy" or now < self._dizzy_until:
+            a.add("dizzy")
+        if self.danika.active():
+            a.add("danika")
+        if self.butterfly.active():
+            a.add("butterfly")
+        if any(p is not None and p.isVisible() for p in self._panels.values()):
+            a.add("panel")
+        if self.focusing():
+            a.add("focus")
+        if self.link_busy:
+            a.add("link")
+        extra = self._ix.busy()
+        if extra:
+            a.update(extra)
+            a.add("plugin")
+        return a
+
+    def can_auto(self, what, acts=None):
+        """自动行为 what(AUTO 表里的名字)现在能不能做; acts 可传入已算好的 activities()"""
+        states, blockers = AUTO[what]
+        if states is not None and self.state not in states:
+            return False
+        return not (blockers & (self.activities() if acts is None else acts))
+
+    def clear_sulk(self):
+        """悄悄结束闹别扭(不说话、不加好感、不推 makeup); 要台词和 +1 走原版消气"""
+        self._sulk_until = 0.0
+        self._sulk_calm = 0
+        self._throws.clear()
+
+    def force_struggle(self, stage, since=None):
+        """拖着时直接按挣扎阶段 stage(1 轻 / 2 重 / 3 激烈 / 4 风元素)抖, 不说那一阶段的台词;
+        since: 从什么时刻算起(决定抖动相位, 每帧传同一个值才会连续抖)。stage 0 = 像刚拿起一样重新计时。"""
+        if not self._dragging:
+            return
+        since = time.monotonic() if since is None else since
+        if stage <= 0:
+            self._drag_hold_t0 = since
+            self._drag_hold_stage = 0
+            return
+        start = (DRAG_HOLD_SEC, DRAG_HOLD_HARD, DRAG_HOLD_FURY, DRAG_HOLD_WIND)[min(int(stage), 4) - 1]
+        self._drag_hold_t0 = since - start - 0.2
+        self._drag_hold_stage = 4          # 标成都喊过了: 只抖不说
+
+    def take_over_spin(self, dizzy_sec, refuse_sec, now=None):
+        """插件接管这一轮转太多的收尾(原版的「晕完生气」不再执行):
+        之后 dizzy_sec 秒内算晕着, refuse_sec 秒内拦住下一次转圈, 拦完说一句缓过来了。"""
+        now = time.monotonic() if now is None else now
+        self._spin_angry_done = True
+        self._spin_overspin = False
+        self._spin_posting = False
+        self._spin_meter = 0.0
+        self._spin_stage = 0
+        self._dizzy_extra = 0
+        self._dizzy_until = now + dizzy_sec
+        self._spin_refuse_until = now + refuse_sec
+        self._spin_recover_at = self._spin_refuse_until + 0.3
+        self._spin_recover_sure = True
+
+    def clear_dizzy(self):
+        """马上不晕了(表情不动, 要换表情另调 set_state)"""
+        self._dizzy_until = 0.0
+
+    def screen_rect(self) -> QRect:
+        """她所在屏幕的可用区域(扣掉任务栏)"""
+        return self._screen_for_rect(self._normal_visible_rect()).availableGeometry()
+
     def live_snapshot(self):
         """DLC 只读快照. 不改任何状态; 字段失败就省略, 不往外抛。"""
         now = time.monotonic()
@@ -3462,8 +3587,10 @@ class PetWindow(QWidget):
 
     # ----- DLC 事件推送 / say (live 协议 v2) -----
     def emit_event(self, _ev, **data):
-        """推一条事件给已订阅的 DLC。没接 LiveHub 或没订阅者就立刻返回; 绝不往外抛。
+        """推一条事件给互动插件(on_event)和已订阅的 DLC。都没有就立刻返回; 绝不往外抛。
         (事件名参数叫 _ev, 好让附加字段能用 name/key 等名字)"""
+        if self._ix.plugins:
+            self._ix.event(_ev, data)
         hub = self._live
         if hub is None or not hub.subs:
             return
@@ -3479,10 +3606,7 @@ class PetWindow(QWidget):
             return "hidden"
         if self.cfg["mute"]:
             return "muted"
-        now = time.monotonic()
-        if (self.state in ("sleep", "dizzy") or self._dragging or self.fling is not None or self._throw is not None
-                or self.spin_rem > 0.5 or now < self._dizzy_until or self._spin_overspin or self._spin_posting
-                or self.danika.active() or self.food_fx is not None):
+        if not self.can_auto("live_say"):
             return "busy"
         text = str(text or "").strip()[:60]
         if not text:

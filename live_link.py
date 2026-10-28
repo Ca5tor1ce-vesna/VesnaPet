@@ -36,13 +36,18 @@ say 规则:
   spin_start / spin_end(meter) / dizzy(why: spin|wall)
   feed(key, name, tier, trait, reaction, first)
      reaction: fav|like|ok|dislike|weird 吃下去的档次 / refuse 推开 / full 吃饱不吃 / sulk_worse 闹别扭时喂讨厌的
-  sleep / wake(why: pet|drag|spin|click|feed|butterfly|other)
+  sleep / wake(why: pet|drag|spin|click|feed|butterfly|water|other)
   state(from, to) / say(text, src: pet|dlc)
   idle_action(act: happy|look|stretch|hop|wave|walk|sneak) / sneak_caught
   sulk(again) / makeup(how) / level_up(name)
   danika_visit(auto) / danika_end(skipped)
   butterfly(stage: come|caught|landed|giveup, auto)
   food_effect_start(key, name, effect) / food_effect_end(key, name, effect, why: done|sleep|hidden|throw|spin|drag)
+  rps(result: win|lose|draw, 从你的角度) / fortune(tier, fresh)
+  focus_start(minutes) / focus_end(minutes, done) / reminder(kind: water|sit|chime|hungry)
+  插件发的: watered(dodged, asleep, forced) / comforted(was_sulking, after, gain) / companion_bonus(count, gain, minutes)
+     / vomit(why, hunger_drop, hunger, affection_drop)
+  同一套事件也会通知互动插件(on_event); 完整说明和字段见 docs/接口规范.md。
 
 同时最多 4 个连接; 单行最多 4KB; 写缓冲超过 64KB 则断开(推送也一样, 慢客户端会被断开)。
 桌宠端不用 waitFor*, 不阻塞 16ms 主循环。

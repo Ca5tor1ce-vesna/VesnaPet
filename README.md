@@ -9,6 +9,7 @@ Windows 桌宠：原版可独立运行；新功能走可选 DLC（食物、特�
 - `dlc/interactions`：安抚、陪同奖励、旋转呕吐、强制浇水等
 - `dlc/voice`：语音素材
 - `dlc/chat`：独立 LLM 聊天窗口（需自备 OpenAI 兼容 API Key，勿把密钥提交进仓库）
+- `docs/接口规范.md`：插件接口、活动与互动矩阵、事件表（写扩展前先看）
 
 ## 运行
 
