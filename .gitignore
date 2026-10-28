@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.deps_ok
+stats.json
+stats.json.bak*
+*.bak
+dlc/chat/config.json
+dlc/chat/memory.json
+dlc/chat/*.local.json
+_test_*.png
+.DS_Store
+Thumbs.db

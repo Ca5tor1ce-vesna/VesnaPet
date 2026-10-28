@@ -1,0 +1,137 @@
+# -*- coding: utf-8 -*-
+"""互动扩展接口: 启动时 import <桌宠目录>/dlc/interactions/*.py, 每个模块提供 create(pet, log_fn) -> 插件对象。
+
+目录不存在 / 没有插件 -> 所有钩子都是空操作, 原版行为不变。插件出错只记 error.log 并被停用。
+插件对象可选实现:
+  on_spin_queasy(now) -> bool   转圈转到顶、即将生气时调用; 返回 True 表示插件接管(原版的生气逻辑不执行)
+  step(t)                       每帧调用
+  paint(key, pm, t) -> (pm, dx) 画立绘前调用, 可替换图/加水平抖动
+  on_say(text, src)             她冒台词气泡时通知
+  on_mouse_press(event) -> bool 鼠标按下(任意键)先问插件; True = 插件吃掉这次按下
+  on_wheel(event) -> bool        滚轮转圈前先问插件; True = 插件吃掉(不转、不攒晕度)
+  on_context_menu(event) -> bool 右键菜单弹出前先问插件; True = 不弹
+  menu_items() -> [(emoji, label, fn)]  往右键菜单(和托盘「互动」子菜单)注册菜单项
+  settings_rows() -> [dict]     往设置面板「扩展」区注册行: {key, emoji, title, desc, control(QWidget), sync(可选)}
+"""
+import importlib.util
+import sys
+from pathlib import Path
+
+
+def pet_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+class Hub:
+    def __init__(self, log_fn=None):
+        self.plugins = []
+        self.log = log_fn
+
+    def _err(self, where, e, plug):
+        if self.log:
+            try:
+                self.log("interaction " + where, e)
+            except Exception:
+                pass
+        if plug in self.plugins:
+            self.plugins.remove(plug)
+
+    def call(self, name, *a):
+        # 插件可设 priority(默认 0), 大的先问; 同级按加载顺序
+        for pl in sorted(self.plugins, key=lambda x: -getattr(x, "priority", 0)):
+            f = getattr(pl, "on_" + name, None)
+            if f is None:
+                continue
+            try:
+                if f(*a):
+                    return True
+            except Exception as e:
+                self._err(name, e, pl)
+        return False
+
+    def step(self, t):
+        for pl in list(self.plugins):
+            f = getattr(pl, "step", None)
+            if f is not None:
+                try:
+                    f(t)
+                except Exception as e:
+                    self._err("step", e, pl)
+
+    def menu_items(self):
+        """收集插件注册的菜单项 [(emoji, label, fn)]; 出错的插件只跳过它的项。"""
+        items = []
+        for pl in list(self.plugins):
+            f = getattr(pl, "menu_items", None)
+            if f is None:
+                continue
+            try:
+                for it in (f() or []):
+                    if isinstance(it, (tuple, list)) and len(it) >= 3 and callable(it[2]):
+                        items.append((str(it[0]), str(it[1]), it[2]))
+            except Exception as e:
+                if self.log:
+                    try:
+                        self.log("interaction menu_items", e)
+                    except Exception:
+                        pass
+        return items
+
+    def settings_rows(self):
+        """收集插件注册的设置行; 出错的插件只跳过它的行(记日志), 不停用插件。"""
+        rows = []
+        for pl in list(self.plugins):
+            f = getattr(pl, "settings_rows", None)
+            if f is None:
+                continue
+            try:
+                for r in (f() or []):
+                    if isinstance(r, dict) and r.get("control") is not None:
+                        rows.append(r)
+            except Exception as e:
+                if self.log:
+                    try:
+                        self.log("interaction settings_rows", e)
+                    except Exception:
+                        pass
+        return rows
+
+    def paint(self, key, pm, t):
+        dx = 0.0
+        for pl in list(self.plugins):
+            f = getattr(pl, "paint", None)
+            if f is not None:
+                try:
+                    r = f(key, pm, t)
+                    if r:
+                        pm, d = r
+                        dx += float(d or 0.0)
+                except Exception as e:
+                    self._err("paint", e, pl)
+        return pm, dx
+
+
+def load(pet, log_fn=None) -> Hub:
+    hub = Hub(log_fn)
+    d = pet_dir() / "dlc" / "interactions"
+    if not d.is_dir():
+        return hub
+    for f in sorted(d.glob("*.py")):
+        if f.name.startswith("_"):
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("vesna_ix_" + f.stem, str(f))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            plug = mod.create(pet, log_fn)
+            if plug is not None:
+                hub.plugins.append(plug)
+        except Exception as e:
+            if log_fn:
+                try:
+                    log_fn("interaction load " + f.name, e)
+                except Exception:
+                    pass
+    return hub
