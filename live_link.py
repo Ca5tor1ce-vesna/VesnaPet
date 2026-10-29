@@ -48,6 +48,7 @@ say 规则:
   user_away(idle) / user_back(away)   你离开电脑 / 回来(只有 Windows 有)
   插件发的: watered(dodged, asleep, forced) / comforted(was_sulking, after, gain) / companion_bonus(count, gain, minutes)
      / vomit(why, hunger_drop, hunger, affection_drop) / wish(stage: start|done|miss|cancel, kind, ...)
+     / rage_poke(pokes, double, undo, blew) / memory(kind: recap|life, text)
   同一套事件也会通知互动插件(on_event); 完整说明和字段见 docs/接口规范.md。
 
 同时最多 4 个连接; 单行最多 4KB; 写缓冲超过 64KB 则断开(推送也一样, 慢客户端会被断开)。

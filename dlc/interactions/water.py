@@ -7,6 +7,8 @@
 「强行浇水」: 左键拖着她时按右键(或滚轮按下) -> 躲不开, 浇 1.5 秒, 她拼命挣扎(原版挣扎抖动, 台词换成浇水的);
   松手后「究极生气」45 秒: 生气脸 + 红色泛光 + 怒气粒子, 偶尔跺脚, 一连串台词, 好感 -3;
   期间摸头被拍开(不加好感, 也挡住 comfort 插件), 连续摸 5 次才哄好(+2)。3 分钟内不能再强行浇。
+  期间戳她(单击/双击)不走原版的「别戳啦」: 第 1 下瞪你, 第 2 下扭头不理, 3–4 下警告, 第 5 下起跺脚朝你吹风(4 秒一次);
+  每戳一下多气 4 秒(剩余最多回到 45 秒); 摸到一半又戳 = 前功尽弃, 摸头次数清零。推 "rage_poke"。
   拖着时的右键菜单被拦下(只拦拖着的时候)。
 台词来源标 src="water", 语音插件不会播。推 "watered"(dodged, asleep, forced)。
 """
@@ -14,7 +16,7 @@ import random
 import time
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QBitmap, QColor, QPainter, QPixmap, QRegion
+from PySide6.QtGui import QBitmap, QColor, QCursor, QPainter, QPixmap, QRegion
 
 COOLDOWN = 5.0
 POUR = 1.0
@@ -34,6 +36,15 @@ CALM_LINE = "…就、就这一次!下次绝对不饶你!"
 AGAIN_LINES = ["你还想来?!", "想都别想!!"]
 NOSPIN_LINES = ["别想转我！"]
 NOSPIN_GAP = 4.0
+POKE_ADD = 4.0                 # 究极生气时每戳一下多气几秒(剩余最多回到 RAGE_SEC)
+POKE_BLOW_AT = 5               # 戳到第几下起会还手(跺脚 + 朝你吹风)
+POKE_BLOW_GAP = 4.0            # 还手最短间隔
+POKE_SAY_GAP = 1.0             # 连戳时台词最短间隔(太快的只有动作)
+POKE_LINES = ["还戳?!我现在超级生气!", "戳什么戳!头发还湿着呢!", "别碰我!水还在往下滴!", "哼!戳一下记一笔!"]
+POKE_TURN_LINES = ["哼!(扭头)", "不看你!不看你!", "……(背过身去)"]
+POKE_WARN_LINES = ["你是嫌我还不够生气吗?!", "再戳……再戳我就真的吹飞你!", "小本本已经写不下了!!", "我数到三……一!二!"]
+POKE_BLOW_LINES = ["风元素——看招!!", "说了别戳!吹飞你!", "呼——!给我离远点!", "这是你自找的!"]
+POKE_UNDO_LINES = ["刚有一点点消气……你又戳!", "前功尽弃!重新哄!", "哼,刚才摸的都不算了!"]
 BUSY = {"drag", "fling", "throw", "food_fx", "edge", "spin", "danika", "vomit"}   # 这些时候浇不了
 
 
@@ -47,7 +58,7 @@ class Water:
         self.force = None          # 强行浇水进行中: dict(t0, next, say)
         self.force_cool = 0.0
         self.rage_pending = False
-        self.rage = None           # 究极生气: dict(t0, next_fx, next_say, next_stomp, pets)
+        self.rage = None           # 究极生气: dict(t0, next_fx, next_say, next_stomp, pets, pokes, ...)
         self._glow_cache = {}
         self.nospin_next = 0.0
 
@@ -111,7 +122,8 @@ class Water:
     def _start_rage(self, t):
         p = self.pet
         self.rage_pending = False
-        self.rage = dict(t0=t, next_fx=t, next_say=t + 0.2, next_stomp=t + 2.0, pets=0)
+        self.rage = dict(t0=t, next_fx=t, next_say=t + 0.2, next_stomp=t + 2.0, pets=0,
+                         pokes=0, poke_say=0.0, next_blow=0.0, turn_until=0.0)
         p.set_state("angry")
         p.sfx.play("hmph")
         p.burst("anger", 3, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
@@ -128,7 +140,7 @@ class Water:
             return
         if p.dragging or p.fling is not None:
             return
-        if p.state not in ("angry", "sleep"):
+        if p.state not in ("angry", "sleep") and t >= r["turn_until"]:     # 扭头那一下不拉回来
             p.set_state("angry")
         if t >= r["next_fx"]:
             r["next_fx"] = t + random.uniform(1.2, 2.0)
@@ -145,6 +157,65 @@ class Water:
         if t >= r["next_say"]:
             r["next_say"] = t + random.uniform(3.5, 5.5)
             self._say(RAGE_LINES, 3.0)
+
+    def on_click(self, double):
+        """究极生气中被戳: 不走原版「别戳啦」。越戳越气, 摸到一半又戳就前功尽弃, 戳多了会还手。"""
+        r = self.rage
+        if r is None:
+            return False
+        p = self.pet
+        now = time.monotonic()
+        r["pokes"] += 1
+        r["t0"] = min(now, r["t0"] + POKE_ADD)          # 多气几秒, 剩余不超过 RAGE_SEC
+        r["next_say"] = max(r["next_say"], now + 3.0)   # 自言自语往后推, 别和回嘴叠在一起
+        n, undo, blew = r["pokes"], r["pets"] > 0, False
+        talk = now >= r["poke_say"]
+        if undo:                                        # 哄到一半又戳
+            r["pets"] = 0
+            self._glare(r, hard=True)
+            pool = POKE_UNDO_LINES
+            talk = True
+        elif n >= POKE_BLOW_AT and now >= r["next_blow"]:
+            r["next_blow"] = now + POKE_BLOW_GAP
+            blew = True
+            self._glare(r, hard=True)
+            if p.landed and not p.edge:
+                p.do_jump(False)
+            p.blow_at_cursor()
+            pool = POKE_BLOW_LINES
+            talk = True
+        elif n == 2:
+            self._turn_away(r, now)
+            pool = POKE_TURN_LINES
+        else:
+            self._glare(r, hard=n >= 3)
+            pool = POKE_WARN_LINES if n >= 3 else POKE_LINES
+        if talk:
+            r["poke_say"] = now + POKE_SAY_GAP
+            self._say(pool, 2.4)
+        p.emit_event("rage_poke", pokes=n, double=bool(double), undo=undo, blew=blew)
+        return True
+
+    def _glare(self, r, hard=False):
+        """猛地转回来瞪你"""
+        p = self.pet
+        r["turn_until"] = 0.0
+        if p.state != "angry":
+            p.set_state("angry")
+        p.kick(-2.4 if hard else -1.6)
+        p.burst("anger", 2 if hard else 1, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
+        if hard:
+            p.burst("steam", 3, at=p.head_point(), bias=(0, 0))
+        p.sfx.play("hmph")
+
+    def _turn_away(self, r, now):
+        """扭头背对鼠标, 1.2 秒后再转回来生气"""
+        p = self.pet
+        cx = QCursor.pos().x() - (p.x() + p.width() / 2)
+        r["turn_until"] = now + 1.2
+        p.set_state("look_left" if cx > 0 else "look", 1.2)
+        p.kick(-1.0)
+        p.burst("anger", 1, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
 
     def on_wheel(self, e):
         """究极生气中(含刚松手待发作)不许转圈: 吃掉滚轮, 不转不攒晕度; 偶尔顶一句。"""
@@ -214,7 +285,7 @@ class Water:
         return bool(self.pet.activities() & BUSY)
 
     def _say(self, pool, dur=2.6, tone="alert"):
-        self.pet.say(random.choice(pool), force=True, duration=dur, tone=tone, src="water")
+        self.pet.say(self.pet.pick_line(pool), force=True, duration=dur, tone=tone, src="water")
 
     # ----- 入口 -----
     def water(self):

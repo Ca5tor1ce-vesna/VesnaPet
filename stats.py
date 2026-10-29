@@ -193,6 +193,13 @@ class Stats:
             return 0
 
     # ----- 计数 / 图鉴 -----
+    def count(self, key):
+        """某个计数(pets / throws / wall_bonks / wish_done …); 没有就是 0"""
+        try:
+            return int(self.d.get(key, 0))
+        except (TypeError, ValueError):
+            return 0
+
     def inc(self, key, n=1):
         self.d[key] = int(self.d.get(key, 0)) + n
         self.touch()

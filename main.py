@@ -95,6 +95,7 @@ STARE_SEC = 4.0                 # 悬停不动多久算"盯着看"
 AWAY_SEC = 600.0                # 这么久没动 = 你离开电脑了; 回来时她迎接你
 SIT_BREAK_SEC = 300.0           # 这么久没动 = 起来活动过了, 久坐计时重来; 这期间也不响提醒
 BACK_LONG_SEC = 7200.0          # 离开超过这么久, 用「等了你好久」那组台词
+RETURN_CHEER_LV = 4             # 好感到这一级(好友)起, 你回来时她跳起来欢迎
 # 被丢出去 / 闹别扭
 THROW_WINDOW = 60.0             # 这段时间内连续丢她, 一次比一次生气(秒)
 THROW_HARD = 2600               # 松手速度超过它算"狠狠地丢"(生气 +1 级)
@@ -116,7 +117,6 @@ SPIN_DECAY = 0.8                # 晕度每秒消退多少格
 SPIN_WOOZY = 8                  # 晕度 >= 它: "有点晕了"
 DIZZY_SEC = 4.0                 # 转晕(摇摇晃晃)时长
 SPIN_PRE_ANGRY_SEC = 2.4        # 这一轮停下后先晕这么久, 再生气
-SPIN_QUEASY = 8                 # 保留: 旧逻辑「晕着还转」阈值, 现已改为先晕再生气
 SPIN_REFUSE_SEC = 15.0          # 这一轮停下来之后, 这么久内拦住下一次转
 QUIP_GAP = 1.1                  # 互动台词最短间隔(秒), 防止气泡刷屏
 # DLC say (live 协议 v2): 允许 DLC 换的表情白名单, 以及只在这些「平静」状态下才换表情
@@ -152,6 +152,9 @@ AUTO = {   # 自动行为: (只在这些表情下做, None = 不限; 会拦住�
     "reminder": (None, {"drag", "fling", "sulk", "danika", "focus", "plugin"}),
     "welcome_back": (None, {"hidden", "drag", "fling", "throw", "food_fx", "sulk", "danika", "focus", "link",
                             "plugin"}),
+    "plugin_talk": (("idle", "look", "look_left", "content", "happy"),       # 插件主动开口(小心愿/她记得)
+                    {"hidden", "sleep", "drag", "fling", "throw", "walk", "chase", "sneak", "food_fx", "sulk", "spin",
+                     "dizzy", "danika", "butterfly", "panel", "focus", "link", "away", "plugin"}),
     "live_say": (None, {"sleep", "dizzy", "drag", "fling", "throw", "spin", "danika", "food_fx", "plugin"}),
 }
 
@@ -976,6 +979,9 @@ class PetWindow(QWidget):
             return "正在安静地陪你专注……"
         if self.state == "sleep":
             return "睡得正香,呼……"
+        lines = self._ix.status_lines()
+        if lines:
+            return lines[0]
         if st.hunger < 25:
             return "肚子咕咕叫,想吃东西~"
         if self.butterfly.active():
@@ -1059,6 +1065,7 @@ class PetWindow(QWidget):
             if self.focus_end is not None:
                 rem = self.focus_remaining()
                 parts.append(f"专注:{'暂停 ' if self.focus_paused else ''}{rem // 60:02d}:{rem % 60:02d}")
+            parts += self._ix.status_lines()          # 插件的状态行(如: 小心愿)
             self.tray.setToolTip("\n".join(parts))
         except Exception as e:
             log_error("tooltip", e)
@@ -1946,7 +1953,8 @@ class PetWindow(QWidget):
         self._landed = False
         self.kick(3.0 if big else 1.8)
         if big:
-            self.set_state("happy", 1.4)
+            if self.state != "cheer":            # celebrate() 先换成欢呼再跳: 别把欢呼盖成 happy
+                self.set_state("happy", 1.4)
             self.burst("star", 8)
             self.sfx.play("boing")
             self.say(random.choice(C.JUMP_TEXTS))
@@ -2061,7 +2069,7 @@ class PetWindow(QWidget):
                                 self._drag_hold_fx = t + 1.15
                                 hp = self.head_point()
                                 self.burst("anger", 1, at=hp + QPointF(self.char_w * 0.25, -10))
-                                self._blow_at_cursor()
+                                self.blow_at_cursor()
                                 if random.random() < 0.45:
                                     self.do_jump(False)
                         elif stage >= 3:
@@ -2093,7 +2101,7 @@ class PetWindow(QWidget):
                                 self.sfx.play("whoosh")
                                 self.burst("sparkle", 8)
                                 self.burst("confetti", 10)
-                                self._blow_at_cursor()
+                                self.blow_at_cursor()
                                 self._drag_hold_fx = t + 1.2
                                 self.say(self.pick_line(C.DRAG_HOLD_WIND_TEXTS), force=True, duration=3.0, tone="alert")
             elif self.walk:
@@ -2505,7 +2513,18 @@ class PetWindow(QWidget):
     def _greet_back(self, pool):
         if self.edge:
             self._reveal_until = time.monotonic() + 3.0
-        self.set_state("wave", 2.0)
+        lv = self.stats.level()[0]
+        if pool is C.RETURN_TEXTS:                        # 短暂离开: 好感够了换成更亲近的那组话
+            for k, extra in C.RETURN_TEXTS_LV.items():
+                if lv >= k:
+                    pool = extra
+        if lv >= RETURN_CHEER_LV:                        # 好友起: 跳起来欢迎, 冒爱心
+            self.set_state("cheer", 2.2)
+            self.burst("heart", 6)
+            if not self.edge:
+                self.do_jump(False)
+        else:
+            self.set_state("wave", 2.0)
         self.burst("sparkle", 6)
         self.say(self.pick_line(pool), duration=3.5, tone="happy")
 
@@ -2858,8 +2877,8 @@ class PetWindow(QWidget):
             QTimer.singleShot(880, lambda: self.sulking() and self.burst("dust", 6, at=self.foot_point(), bias=(0, 0)))
         QTimer.singleShot(950, self._gust)
 
-    def _blow_at_cursor(self):
-        """朝鼠标吹一小阵风。拖着她的时候也能用。"""
+    def blow_at_cursor(self):
+        """朝鼠标吹一小阵风(粒子+音效, 不会真的动鼠标)。拖着她的时候也能用; 插件可调。"""
         if not self.isVisible():
             return
         cur = QCursor.pos()
@@ -2878,13 +2897,13 @@ class PetWindow(QWidget):
         self.burst("sparkle", 6)
         if not self.edge:
             self.do_jump(False)
-        QTimer.singleShot(280, self._blow_at_cursor)
+        QTimer.singleShot(280, self.blow_at_cursor)
         self.say(self.pick_line(C.DRAG_HOLD_WIND_DROP_TEXTS), force=True, duration=3.2, tone="alert")
 
     def _gust(self):
         if not self.sulking() or self._dragging or self.fling or not self.isVisible():
             return
-        self._blow_at_cursor()
+        self.blow_at_cursor()
         self.quip(C.REVENGE_TEXTS, urgent=True, duration=2.2)
 
     def _sulk_turn_away(self):
@@ -3195,6 +3214,8 @@ class PetWindow(QWidget):
             return
         self.note_interaction()
         self.emit_event("double_click")
+        if self._ix.call("click", True):
+            return
         now = time.monotonic()
         self.clicks.append(now)
         if self.state == "sleep":
@@ -3281,6 +3302,8 @@ class PetWindow(QWidget):
     def on_click(self):
         now = time.monotonic()
         self.emit_event("click")
+        if self._ix.call("click", False):          # 互动扩展接管(如: 究极生气时被戳)
+            return
         if self.state == "sleep":
             self.clicks.clear()
             self.wake_up("click")
@@ -3334,7 +3357,14 @@ class PetWindow(QWidget):
             return
         name = next((n for k, n, _ in C.CODEX if k == key), None)
         if name:
-            QTimer.singleShot(2600, lambda: self.say(f"📖 图鉴解锁:「{name}」", duration=3.0, tone="info"))
+            QTimer.singleShot(2600, lambda: self._say_codex(name))
+
+    def _say_codex(self, name, tries=0):
+        """图鉴解锁提示: 等她这句说完再冒, 不盖掉别的台词(最多等 30 秒)"""
+        if self.bubble.isVisible() and tries < 15:
+            QTimer.singleShot(2000, lambda: self._say_codex(name, tries + 1))
+            return
+        self.say(f"📖 图鉴解锁:「{name}」", duration=3.0, tone="info")
 
     def stand_key(self):
         st = self.state

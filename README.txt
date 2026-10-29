@@ -117,8 +117,10 @@
 【其他说明】
   - 只会运行一个实例,重复双击 run.bat 不会出现第二只。
   - 窗口属于工具窗口:不会出现在任务栏,也不抢键盘焦点。
-  - 文件说明: main.py 主程序;grok_link.py Grok 联动模块;assets/ 七张透明素材(idle/happy/angry/sleep/surprised.png + 探头用 peek_awake/peek_sleep.png);
-    requirements.txt 依赖;run.bat 启动脚本。
+  - 文件说明: main.py 主程序; panels.py / ui_kit.py 面板与组件; content.py 台词与数据; stats.py 存档;
+    effects.py 粒子; food_fx.py 吃后效果; companion.py 蝴蝶与达妮卡; sounds.py 合成音效;
+    grok_link.py Grok 联动; live_link.py DLC 管道; sysidle.py 系统空闲时间; interaction_hooks.py 插件加载;
+    assets/ 立绘与食物图标; dlc/ 可选扩展; docs/接口规范.md 扩展接口; tools/ 小工具; run.bat 启动脚本。
   - 想改行为参数(睡觉等待时间、气泡文字、大小像素等),用记事本打开 main.py,
     修改文件开头的"可调参数"区域即可。
 
@@ -145,6 +147,8 @@ companion_time.py「陪伴奖励」: 显示且醒着累计 1 小时(隐藏/睡�
   设置 → 设置页「扩展」区: 🗣️ 语音 开关 + 🎚️ 语音音量(0-100), 写 voice_config.json, 即时生效; voice_map.json 改动后自动重载。插件可用 settings_rows() 往「扩展」区注册行。
 浇水 water.py: 右键菜单 / 托盘「互动」→ 💧 浇水; 插件可用 menu_items() 注册菜单项。voice.py 只配 src="pet" 的台词。
 强行浇水: 左键拖着她时按右键或滚轮键 -> 浇 1.5 秒 + 挣扎, 松手后究极生气 45 秒(好感 -3, 摸头被拍开, 连摸 5 次哄好 +2), 冷却 3 分钟。钩子 on_mouse_press / on_context_menu, 插件 priority。
+  究极生气时戳她: 第 1 下瞪你, 第 2 下扭头不理, 3–4 下警告, 第 5 下起跺脚朝你吹风(4 秒一次); 每戳多气 4 秒(最多回到 45 秒);
+  摸到一半又戳 = 前功尽弃, 摸头次数清零。钩子 on_click。
 
 【离开 / 回来】(2026-10-29, 只在 Windows 上生效; 新文件 sysidle.py)
 她会看整台电脑多久没碰键盘鼠标(GetLastInputInfo, 只读一个系统计时, 不挂钩子, 不知道你按了什么):
@@ -152,7 +156,8 @@ companion_time.py「陪伴奖励」: 显示且醒着累计 1 小时(隐藏/睡�
   - 久坐提醒: 键盘鼠标 5 分钟没动算起来活动过, 计时重来(以前是她睡着就清零, 结果几乎不响)。
   - 喝水 / 久坐 / 整点提醒: 她睡着但你在电脑前时, 会醒过来提醒你; 你不在时不响。
   - 提醒不会再插进达妮卡的对话、拖拽、甩飞、究极生气、转吐。
-  可调参数在 main.py 开头: AWAY_SEC / SIT_BREAK_SEC / BACK_LONG_SEC。事件 user_away / user_back。
+  - 好感到「好友」(Lv.4)起, 你回来时她跳一下、冒爱心, 换一组更亲近的话; 「心之契约」(Lv.6)再换一组。
+  可调参数在 main.py 开头: AWAY_SEC / SIT_BREAK_SEC / BACK_LONG_SEC / RETURN_CHEER_LV。事件 user_away / user_back。
   全屏看视频超过 10 分钟不碰键盘鼠标也会被当成离开, 动一下鼠标她就会迎接你。
   不是 Windows 时读不到, 一切按原来的规矩(她睡着算你不在)。
 
@@ -162,5 +167,18 @@ companion_time.py「陪伴奖励」: 显示且醒着累计 1 小时(隐藏/睡�
   - 2 分钟内满足: 专门的道谢 + 爱心, 好感 +4(在那次互动原本的奖励之外)。头顶会时不时冒心愿的小图标, 1 分钟时提示一次怎么做。
   - 没理她: 嘟囔一句就算了, 不扣好感。她睡着 / 隐藏 / 闹别扭 / 被强行浇水 / 你离开电脑时, 心愿作废。
   - 勿扰时不提; 吃饱(饱腹 >= 80)时不提吃的; 每天最多 8 个。累计次数在 stats.json 的 wish_done / wish_missed。
+  - 正在等的心愿会显示在托盘图标的提示和小屋的心情行里(还剩多少秒), 气泡没看到也不会错过。
   - 事件 "wish"(stage: start / done / miss / cancel)。测试用环境变量 VESNA_WISH_SEC=秒数 缩短间隔。
   不想要就删掉 wish.py(或改名成 _wish.py)。
+
+【她记得】(2026-10-29) dlc/interactions/memories.py
+她会记下每天发生了什么(只记次数), 偶尔提起来:
+  - 每天第一次安静下来时(启动 1.5 分钟后)说一句「昨天 / 上次」的事: 被丢了几次、摸了几次头、喂了几次什么、
+    陪你专注了多久、猜拳谁赢、帮她实现了几个心愿……挑一件那天真发生过的; 那天没什么可说就不说。
+  - 偶尔(40–90 分钟)说一句累计的事: 一共喂过几次某样菜、撞过几次墙、认识几天了……同一类 7 天内不重复。
+  - 一天最多 3 句; 勿扰时不说; 有小心愿在等时不插嘴。事件 "memory"。
+  - 记录在 数据目录/memories.json, 只留最近 8 天; 测试用环境变量 VESNA_MEMO_SEC=秒数。不想要就删掉 memories.py。
+
+【其他小改动】(2026-10-29)
+  - 「图鉴解锁」的提示会等她这句话说完再冒, 不再盖掉别的台词。
+  - 升级、专注完成、联动完工时的欢呼表情以前会被紧接着的大跳盖掉, 现在看得到了。

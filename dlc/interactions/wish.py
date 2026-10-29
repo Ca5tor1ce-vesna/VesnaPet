@@ -2,12 +2,12 @@
 """互动 DLC「小心愿」: 她安静待着的时候, 隔一阵(启动后 6–12 分钟, 之后 20–40 分钟)提一个小要求,
 都是现成的互动: 摸摸头 / 想吃甜的 / 想吃冰的或喝凉的 / 想喝热汤 / 陪我猜拳 / 想看蝴蝶。
 - 2 分钟内满足她: 专门的台词 + 爱心, 好感 +4(在那次互动原本的奖励之外)。
-- 一分钟还没动静会提示一次怎么做; 到时没理她就嘟囔一句, 不扣好感。
+- 一分钟还没动静会提示一次怎么做; 到时没理她就嘟囔一句, 不扣好感。等着的心愿也显示在托盘提示和小屋的心情行里。
 - 中途她睡着 / 隐藏 / 闹别扭 / 被强行浇水 / 你离开电脑: 心愿悄悄作废。勿扰时不提心愿。
 - 每天最多 8 个; 累计次数记在 stats 的 wish_done / wish_missed。
 - 推 "wish" 事件: stage = start(kind, text) / done(kind, after, gain) / miss(kind) / cancel(kind)。
 测试用: 环境变量 VESNA_WISH_SEC=秒数, 把心愿间隔(含第一次)改成这么多秒。
-只用公开接口(docs/接口规范.md); 满足与否靠 on_event 看事件, 忙不忙靠 pet.activities()。
+只用公开接口(docs/接口规范.md); 满足与否靠 on_event 看事件, 能不能开口看 pet.can_auto("plugin_talk")。
 """
 import os
 import random
@@ -24,29 +24,27 @@ REMIND_SEC = 20.0                  # 等待中每隔这么久, 头顶冒一下�
 DAILY_MAX = 8
 GAIN = 4
 FULL = 80                          # 饱腹到这儿就不许吃的心愿
-CALM = ("idle", "look", "look_left", "content", "happy")
-BLOCK = {"hidden", "sleep", "drag", "fling", "throw", "walk", "chase", "sneak", "food_fx", "sulk", "spin", "dizzy",
-         "danika", "butterfly", "panel", "focus", "link", "away", "plugin"}       # 这些时候不提新心愿、不催
+CALM = ("idle", "look", "look_left", "content", "happy")   # 满足后说谢谢时, 这些表情可以换成 love
 CANCEL = {"hidden", "sleep", "sulk", "away", "rage", "water_force"}               # 这些时候正等着的心愿作废
 FOOD_TRAITS = {"sweet": {"sweet"}, "cold": {"cold", "drink"}, "stew": {"stew"}}
 
-WISHES = {   # emoji: 头顶图标; delay: 满足后隔多久说谢谢(让那次互动自己的台词先说完)
-    "pet": dict(emoji="🤚", delay=2.2, hint="(在我头上左右蹭蹭就好)",
+WISHES = {   # emoji: 头顶图标; label: 托盘提示/小屋里显示; delay: 满足后隔多久说谢谢(让那次互动自己的台词先说完)
+    "pet": dict(emoji="🤚", label="想被摸摸头", delay=2.2, hint="(在我头上左右蹭蹭就好)",
                 ask=["……头冠有点歪了,帮我摸摸头嘛?", "今天还没被摸过头呢……(偷偷看你)", "想、想被摸摸头……就一下下!"],
                 done=["嘿嘿……就是这个!心愿达成~", "你真的听见了呀……嘿嘿。", "满足了!头冠也不歪了~"]),
-    "sweet": dict(emoji="🍮", delay=5.0, hint="(右键 → 投喂)",
+    "sweet": dict(emoji="🍮", label="想吃甜的", delay=5.0, hint="(右键 → 投喂)",
                   ask=["好想吃甜的……杏仁豆腐、团子,什么都行!", "嘴巴想要甜甜的东西了~", "要是现在有一份甜点就好了……(小声)"],
                   done=["就是想吃甜的!你怎么知道的~", "甜甜的心愿,达成!", "嘿嘿,被你宠坏了……"]),
-    "cold": dict(emoji="🍨", delay=5.0, hint="(右键 → 投喂)",
+    "cold": dict(emoji="🍨", label="想吃冰的", delay=5.0, hint="(右键 → 投喂)",
                  ask=["想吃点冰冰凉凉的……", "有没有冰淇淋,或者凉凉的饮料呀?", "至冬人也想来一口冰的~"],
                  done=["呼——冰冰凉凉,太满足了!", "就是这个感觉!心愿达成~", "凉到心里去了,嘿嘿。"]),
-    "stew": dict(emoji="🍲", delay=5.0, hint="(右键 → 投喂)",
+    "stew": dict(emoji="🍲", label="想喝热汤", delay=5.0, hint="(右键 → 投喂)",
                  ask=["想喝一碗热乎乎的汤……", "要是有红菜汤就好了……(咕噜)", "肚子想要暖暖的东西~"],
                  done=["呼……从肚子暖到翅膀尖了~", "就是想喝这个!你最懂我了~", "热汤心愿,达成!"]),
-    "rps": dict(emoji="✊", delay=2.0, hint="(右键 → 猜拳)",
+    "rps": dict(emoji="✊", label="想猜拳", delay=2.0, hint="(右键 → 猜拳)",
                 ask=["好无聊……陪我猜一局拳嘛?", "要不要来猜拳?输了不许哭哦~", "手痒了!来猜拳!"],
                 done=["嘿嘿,陪我玩啦~ 心愿达成!", "你愿意陪我玩,我很开心哦。", "再来……不对,已经很满足啦~"]),
-    "butterfly": dict(emoji="🦋", delay=1.0, hint="(右键 → 召唤蝴蝶)",
+    "butterfly": dict(emoji="🦋", label="想看蝴蝶", delay=1.0, hint="(右键 → 召唤蝴蝶)",
                       ask=["好想看蝴蝶呀……能叫一只过来吗?", "今天的蝴蝶怎么还没来……", "想和蝴蝶玩~"],
                       done=["蝴蝶来啦!你是怎么做到的~", "哇,真的来了!谢谢你~", "心愿达成!……蝴蝶,别跑呀~"]),
 }
@@ -107,7 +105,7 @@ class Wish:
         self._next_check = t + 0.5
         p = self.pet
         acts = p.activities()
-        if p.state in CALM and not (acts & BLOCK):
+        if p.can_auto("plugin_talk", acts):          # 安静待着、没在忙(规则在 main.AUTO)
             if self.calm_since is None:
                 self.calm_since = t
         else:
@@ -160,7 +158,7 @@ class Wish:
         if acts & CANCEL:
             self._end(t, "cancel")
             return
-        free = not (acts & BLOCK) and not p.bubble.isVisible()
+        free = p.can_auto("plugin_talk", acts) and not p.bubble.isVisible()
         el = t - c["t0"]
         if el >= ANSWER_SEC:
             self._end(t, "miss")
@@ -176,6 +174,15 @@ class Wish:
         elif t >= c["next_fx"] and free:
             c["next_fx"] = t + REMIND_SEC
             p.burst("emoji", 1, at=self._above_head(), text=WISHES[c["kind"]]["emoji"])
+
+    def status_text(self):
+        """托盘提示 / 小屋心情行: 正在等的心愿和剩余时间"""
+        c = self.cur
+        if c is None or c["done"]:
+            return None
+        w = WISHES[c["kind"]]
+        left = max(0, int(ANSWER_SEC - (time.monotonic() - c["t0"])))
+        return f"{w['emoji']} 小心愿:{w['label']}(还剩 {left} 秒)"
 
     # ----- 事件 -----
     def on_event(self, name, data):

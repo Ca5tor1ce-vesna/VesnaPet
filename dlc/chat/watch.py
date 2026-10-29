@@ -142,6 +142,12 @@ def event_line(ev):
         if ev.get("asleep"):
             return "她睡着时你给她浇了水，她被浇醒气坏了（互动）"
         return "你想给她浇水，被她躲开了（互动）" if ev.get("dodged") else None
+    if name == "rage_poke":
+        if ev.get("undo"):
+            return "你快把她哄好了，又戳了她一下，前功尽弃（互动）"
+        if ev.get("blew"):
+            return "她超级生气时你一直戳，她跺脚朝你吹了一阵风（互动）"
+        return "她正超级生气，你还去戳她（互动）" if ev.get("pokes") == 1 else None
     if name == "comforted":
         return "她生气时你摸了摸她的头，她别扭地消气了（互动）"
     if name == "companion_bonus":
