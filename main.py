@@ -29,6 +29,7 @@ from grok_link import GrokLink, error_log_path, log_error
 from live_link import LiveHub
 from sounds import Sfx
 from stats import Stats, data_dir
+import sysidle
 from ui_kit import INK, draw_gem, font, food_pixmap, shadow_image
 
 APP_NAME = "VesnaPet"
@@ -90,6 +91,10 @@ DRAG_HOLD_FURY = 13.5           # 激烈挣扎 + 第三句(仍不会自己挣脱
 DRAG_HOLD_WIND = 18.0           # 再拖: 风元素爆发(转圈+吹光标,仍不挣脱)
 SNEAK_SEC = (3.2, 4.6)          # 偷吃持续时长
 STARE_SEC = 4.0                 # 悬停不动多久算"盯着看"
+# 离开 / 回来: 看整台电脑的键盘鼠标有多久没动(只有 Windows 读得到; 读不到就按老规矩, 她睡着算你不在)
+AWAY_SEC = 600.0                # 这么久没动 = 你离开电脑了; 回来时她迎接你
+SIT_BREAK_SEC = 300.0           # 这么久没动 = 起来活动过了, 久坐计时重来; 这期间也不响提醒
+BACK_LONG_SEC = 7200.0          # 离开超过这么久, 用「等了你好久」那组台词
 # 被丢出去 / 闹别扭
 THROW_WINDOW = 60.0             # 这段时间内连续丢她, 一次比一次生气(秒)
 THROW_HARD = 2600               # 松手速度超过它算"狠狠地丢"(生气 +1 级)
@@ -130,7 +135,8 @@ ACTIVITIES = {
     "walk": "散步/走过来", "chase": "追蝴蝶", "sneak": "偷吃", "food_fx": "食物包吃后效果",
     "sulk": "闹别扭", "spin": "滚轮转圈中/转过头待发作", "dizzy": "晕着",
     "danika": "达妮卡来访", "butterfly": "蝴蝶在场", "panel": "开着面板(小屋/运势/猜拳等)",
-    "focus": "专注计时(未暂停)", "link": "Grok 联动工作中", "plugin": "有插件的 busy() 非空",
+    "focus": "专注计时(未暂停)", "link": "Grok 联动工作中", "away": "你离开电脑了(仅 Windows)",
+    "plugin": "有插件的 busy() 非空",
 }
 AUTO = {   # 自动行为: (只在这些表情下做, None = 不限; 会拦住它的活动)
     "idle_action": (("idle",), {"hidden", "drag", "fling", "walk", "food_fx", "plugin"}),
@@ -143,7 +149,9 @@ AUTO = {   # 自动行为: (只在这些表情下做, None = 不限; 会拦住�
     "chase": (None, {"hidden", "sleep", "dizzy", "edge", "drag", "fling", "sulk", "food_fx", "danika", "panel",
                      "focus", "link", "plugin"}),
     "fall_asleep": (("idle",), {"drag", "fling", "walk"}),
-    "reminder": (None, {"focus", "sulk"}),
+    "reminder": (None, {"drag", "fling", "sulk", "danika", "focus", "plugin"}),
+    "welcome_back": (None, {"hidden", "drag", "fling", "throw", "food_fx", "sulk", "danika", "focus", "link",
+                            "plugin"}),
     "live_say": (None, {"sleep", "dizzy", "drag", "fling", "throw", "spin", "danika", "food_fx", "plugin"}),
 }
 
@@ -551,6 +559,8 @@ class PetWindow(QWidget):
         self._water_last = now; self._sit_last = now
         self._chime_hour = datetime.now().hour
         self._hungry_last = now
+        self._sys_idle = None             # 整台电脑多少秒没碰键盘鼠标; None = 读不到(非 Windows)
+        self._away_since = None           # 你离开电脑的时刻; None = 在
         self._dodge_say = 0.0
         self._mumble_next = 0.0          # 梦话冷却
         self._wake_drag = False          # 这次拖拽是把她从睡梦里拎起来的
@@ -2432,6 +2442,7 @@ class PetWindow(QWidget):
             self._check_geometry()
         self._check_focus()
         self._update_tooltip()
+        self._check_presence()
         self._check_reminders()
         self.stats.tick(1.0)
         if self._geo_tick % 10 == 0:
@@ -2460,31 +2471,78 @@ class PetWindow(QWidget):
             self.set_state("yawn", 3.0)
             self.say(random.choice(C.YAWN_TEXTS))
 
+    def _check_presence(self):
+        """每秒: 看整台电脑多久没碰键盘鼠标 -> 你离开了 / 回来了。读不到(非 Windows)就什么都不做"""
+        idle = sysidle.idle_seconds()
+        self._sys_idle = idle
+        if idle is None:
+            return
+        now = time.monotonic()
+        if self._away_since is None:
+            if idle >= AWAY_SEC:
+                self._away_since = now - idle
+                self.emit_event("user_away", idle=int(idle))
+        elif idle < 3.0:
+            away = now - self._away_since
+            self._away_since = None
+            self.emit_event("user_back", away=int(away))
+            self._welcome_back(away)
+
+    def _welcome_back(self, away):
+        """你离开电脑一阵又回来了: 她迎接你; 睡着就先伸个懒腰醒过来"""
+        if not self.can_auto("welcome_back"):
+            return
+        self.note_interaction()
+        self.stop_walk()
+        pool = C.BACK_TEXTS if away >= BACK_LONG_SEC else C.RETURN_TEXTS
+        if self.state == "sleep":
+            self.set_state("stretch", 1.3, why="back")
+            self.burst("sparkle", 4)
+            QTimer.singleShot(1300, lambda: self.state in ("stretch", "idle") and self._greet_back(pool))
+        else:
+            self._greet_back(pool)
+
+    def _greet_back(self, pool):
+        if self.edge:
+            self._reveal_until = time.monotonic() + 3.0
+        self.set_state("wave", 2.0)
+        self.burst("sparkle", 6)
+        self.say(self.pick_line(pool), duration=3.5, tone="happy")
+
     def _check_reminders(self):
         now = time.monotonic()
-        if self.state == "sleep" or not self.isVisible():
-            self._sit_last = now                  # 人不在电脑前: 久坐计时重来
+        idle = self._sys_idle
+        # 你不在电脑前: 久坐计时重来, 也不提醒。读得到系统空闲就看它; 读不到按老规矩, 她睡着就当你不在
+        away = (self.state == "sleep") if idle is None else (idle >= SIT_BREAK_SEC)
+        if away or not self.isVisible():
+            self._sit_last = now
             return
         if not self.can_auto("reminder"):
             return
+        # 下面的提醒在她睡着、你却在电脑前时会把她叫醒(醒来原因 reminder); 提醒完算一次互动, 免得马上又睡把气泡收掉
         wm, sm = int(self.cfg["water_min"]), int(self.cfg["sit_min"])
         if wm > 0 and now - self._water_last >= wm * 60:
             self._water_last = now
             self.emit_event("reminder", kind="water")
-            self.set_state("wave", 1.6)
+            self.note_interaction()
+            self.set_state("wave", 1.6, why="reminder")
             self.burst("drop", 3)
             self.say(random.choice(C.WATER_TEXTS), force=True, duration=4.5, tone="info")
             return
         if sm > 0 and now - self._sit_last >= sm * 60:
             self._sit_last = now
             self.emit_event("reminder", kind="sit")
-            self.set_state("stretch", 2.0)
+            self.note_interaction()
+            self.set_state("stretch", 2.0, why="reminder")
             self.say(random.choice(C.SIT_TEXTS), force=True, duration=4.5, tone="info")
             return
         hr = datetime.now()
         if self.cfg["chime"] and hr.minute == 0 and hr.hour != self._chime_hour:
             self._chime_hour = hr.hour
             self.emit_event("reminder", kind="chime")
+            if self.state == "sleep":
+                self.note_interaction()
+                self.set_state("idle", why="reminder")
             self.burst("note", 3)
             self.say(f"现在是 {hr.hour} 点整~", force=True, tone="info")
             return
@@ -3467,6 +3525,8 @@ class PetWindow(QWidget):
             a.add("focus")
         if self.link_busy:
             a.add("link")
+        if self._away_since is not None:
+            a.add("away")
         extra = self._ix.busy()
         if extra:
             a.update(extra)

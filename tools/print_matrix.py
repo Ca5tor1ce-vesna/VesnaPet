@@ -8,7 +8,8 @@ MAIN = Path(__file__).resolve().parent.parent / "main.py"
 NAMES = {   # 自动行为的中文说明
     "idle_action": "空闲小动作", "danika_auto": "达妮卡自己来", "danika": "叫达妮卡(手动也查)",
     "random_bubble": "随机冒一句", "sneak": "偷吃", "auto_butterfly": "蝴蝶自己飞来", "chase": "去追蝴蝶",
-    "fall_asleep": "没人理就睡着", "reminder": "喝水/久坐/整点/饿了提醒", "live_say": "DLC 的 say",
+    "fall_asleep": "没人理就睡着", "reminder": "喝水/久坐/整点/饿了提醒", "welcome_back": "你回来时迎接",
+    "live_say": "DLC 的 say",
 }
 
 

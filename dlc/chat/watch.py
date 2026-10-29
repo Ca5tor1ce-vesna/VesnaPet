@@ -49,6 +49,8 @@ WAKE_LINE = {
     "click": "被你点醒了（互动）",
     "feed": "被你用吃的叫醒了（互动）",
     "butterfly": "被蝴蝶弄醒了",
+    "back": "你回来了，她伸个懒腰醒过来迎接你",
+    "reminder": "她自己醒过来提醒你",
 }
 IDLE_LINE = {
     "happy": "自己开心了一下（空闲动作）",
@@ -202,6 +204,21 @@ def event_line(ev):
         return "专注完成了，她在为你庆祝" if ev.get("done") else "你提前结束了专注"
     if name == "reminder":
         return REMINDER_LINE.get(ev.get("kind"))       # 整点报时不记
+    if name == "user_away":
+        return "你离开了电脑"
+    if name == "user_back":
+        try:
+            mins = max(1, int(ev.get("away") or 0) // 60)
+        except (TypeError, ValueError):
+            mins = 1
+        return f"你离开了 {mins} 分钟，回到了电脑前"
+    if name == "wish":
+        st = ev.get("stage")
+        if st == "start":
+            return f"她小声许了个心愿：「{ev.get('text') or ''}」"
+        if st == "done":
+            return "你满足了她的小心愿，她特别开心（互动）"
+        return "她的小心愿没人理，过期了" if st == "miss" else None
     if name == "food_effect_start":
         how = FOOD_FX_LINE.get(ev.get("effect"), "她吃完不太对劲")
         return f"你喂了她{ev.get('name') or '奇怪的东西'}，{how}（整蛊）"
