@@ -76,6 +76,12 @@ class VomitFx:
     def busy(self):
         return "vomit" if self.active else None
 
+    def state_text(self):
+        """小屋头部那句话"""
+        if not self.active:
+            return None
+        return "脸色发青,胃在翻跟头……" if self.stage == 0 else "……这一幕请你忘掉"
+
     def on_spin_queasy(self, now):
         p = self.pet
         if self.active or now < self.cool_until:

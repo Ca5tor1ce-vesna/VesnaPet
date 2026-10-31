@@ -169,6 +169,8 @@ TUNABLE = {
     "food_refuse_p": ("float", 0.0, 1.0),       # 不爱吃 / 奇怪的东西直接推开的概率; ctx: key tier trait
     "come_ok": ("bool", None, None),            # 叫她「过来~」肯不肯来
     "hungry_remind": ("float", 0.0, 86400.0),   # 饿了提醒的间隔(秒), 0 = 本体不提醒(交给插件)
+    "sneak_done_lines": ("lines", None, None),  # 偷吃没被发现, 吃完得意的那句的台词池
+    "sneak_caught_lines": ("lines", None, None),  # 偷吃被你点到, 害羞否认的那句的台词池
 }
 
 TRAY_QSS = """
@@ -989,11 +991,25 @@ class PetWindow(QWidget):
         self.say(C.LEVEL_UP.format(name=name), force=True, duration=5.0, tone="happy")
 
     def mood_text(self):
+        """小屋头部那句话: 正在发生什么就说什么(插件管的状态最先), 没事时和原来一样按好感说"""
         st = self.stats
+        for text in self._ix.state_texts():             # 插件管的状态(超级生气、转吐……)
+            return text
+        acts = self.activities()
+        for act, text in C.STATUS_BUSY_TEXTS:
+            if act in acts:
+                if act == "food_fx" and self.food_fx is not None:
+                    food = self.food_fx.food                  # 用卡片上的短名, 长名放不下
+                    return text.format(name=food.get("short") or food.get("name") or "奇怪的东西")
+                return text
         if self.focus_end is not None:
             return "正在安静地陪你专注……"
         if self.state == "sleep":
             return "睡得正香,呼……"
+        if self.state in C.STATUS_STATE_TEXTS:
+            return C.STATUS_STATE_TEXTS[self.state]
+        if "walk" in acts:
+            return C.STATUS_WALK_TEXT
         if st.hunger < 25:
             return "肚子咕咕叫,想吃东西~"
         if self.butterfly.active():
@@ -2666,7 +2682,7 @@ class PetWindow(QWidget):
         self.burst("excl", 1)
         self.burst("sweat", 2)
         self.sfx.play("huh")
-        self.say(self.pick_line(C.SNEAK_CAUGHT_TEXTS), force=True, duration=2.8)
+        self.say(self.pick_line(self._tune("sneak_caught_lines", C.SNEAK_CAUGHT_TEXTS)), force=True, duration=2.8)
 
     def _finish_sneak(self):
         if self._sneak_caught or self._dragging or self.fling:
@@ -2679,7 +2695,9 @@ class PetWindow(QWidget):
             return
         self.set_state("content", 2.2)
         self.burst("sparkle", 3)
-        self.say(self.pick_line(C.SNEAK_SMUG_TEXTS), force=True, duration=2.4, tone="happy")
+        self.say(self.pick_line(self._tune("sneak_done_lines", C.SNEAK_SMUG_TEXTS)), force=True, duration=2.4,
+                 tone="happy")
+        self.emit_event("sneak_done")
 
     # ----- 睡着时的互动 -----
     def _sleep_mumble(self):

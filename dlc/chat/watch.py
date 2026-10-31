@@ -147,6 +147,8 @@ def event_line(ev):
         return f"她的心情变成了「{MOOD_NAME.get(ev.get('band'), '')}」"
     if name == "approach":
         return "她饿了，自己走到你旁边要吃的（主动）" if ev.get("why") == "hungry" else "她自己走过来陪你（主动）"
+    if name == "weak_hop":
+        return "你双击她，可她饿得跳不动了（互动）"
     if name == "come_refused":
         return "你叫她过来，她不肯动（互动）"
     if name == "rage_poke":

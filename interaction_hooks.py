@@ -20,6 +20,8 @@
   on_wheel(event) -> bool        滚轮转圈前先问插件; True = 插件吃掉(不转、不攒晕度)
   on_context_menu(event) -> bool 右键菜单弹出前先问插件; True = 不弹
   status_text() -> str | None   插件想显示的一行状态(托盘提示、右键卡片的状态行), 如「小心愿: 想吃甜的」
+  state_text() -> str | None    插件管的短暂状态正在进行时, 小屋头部那句话显示它(如「头发还在滴水,火气倒是很旺」);
+                                只在那段时间返回, 平时返回 None(头部那句就照常按好感说)
   menu_items() -> [(emoji, label, fn)]  往右键菜单(和托盘「互动」子菜单)注册菜单项
   settings_rows() -> [dict]     往设置面板「扩展」区注册行: {key, emoji, title, desc, control(QWidget), sync(可选)}
 """
@@ -98,6 +100,20 @@ class Hub:
             except Exception as e:
                 self._err("tune " + str(name), e, pl)
         return value
+
+    def state_texts(self):
+        """插件管的短暂状态的一句话(超级生气、转吐……); 都没有就是空列表"""
+        out = []
+        for pl in list(self.plugins):
+            f = getattr(pl, "state_text", None)
+            if f is not None:
+                try:
+                    txt = f()
+                    if txt:
+                        out.append(str(txt))
+                except Exception as e:
+                    self._err("state_text", e, pl)
+        return out
 
     def status_lines(self):
         """插件的状态行; 都没有就是空列表"""

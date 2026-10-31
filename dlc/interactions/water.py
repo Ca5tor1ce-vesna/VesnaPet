@@ -62,6 +62,14 @@ class Water:
         self._glow_cache = {}
         self.nospin_next = 0.0
 
+    def state_text(self):
+        """小屋头部那句话"""
+        if self.force is not None:
+            return "被迫洗了个澡……抗议无效"
+        if self.rage is not None or self.rage_pending:
+            return "头发还在滴水,火气倒是很旺"
+        return None
+
     def busy(self):
         if self.force is not None:
             return "water_force"
