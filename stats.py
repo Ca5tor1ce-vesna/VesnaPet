@@ -38,7 +38,7 @@ class Stats:
         "pets": 0, "feeds": 0, "butterflies": 0, "danika_visits": 0, "focus_minutes": 0, "focus_sessions": 0,
         "rps_win": 0, "rps_lose": 0, "rps_draw": 0, "jumps": 0, "uptime_sec": 0.0,
         "throws": 0, "wall_bonks": 0, "sulks": 0, "dizzies": 0,
-        "seen": [], "fav_found": False, "fortune_day": None,
+        "seen": [], "fav_found": False, "fortune_day": None, "mood": None,
         "foods": {}, "food_known": [], "food_refused": 0, "food_sulks": 0,
         "daily": {"day": None, "counts": {}, "focus_min": 0},
     }

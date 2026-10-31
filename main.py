@@ -30,6 +30,7 @@ from live_link import LiveHub
 from sounds import Sfx
 from stats import Stats, data_dir
 import sysidle
+from mood import Mood
 from ui_kit import INK, draw_gem, font, food_pixmap, shadow_image
 
 APP_NAME = "VesnaPet"
@@ -156,6 +157,18 @@ AUTO = {   # 自动行为: (只在这些表情下做, None = 不限; 会拦住�
                     {"hidden", "sleep", "drag", "fling", "throw", "walk", "chase", "sneak", "food_fx", "sulk", "spin",
                      "dizzy", "danika", "butterfly", "panel", "focus", "link", "away", "plugin"}),
     "live_say": (None, {"sleep", "dizzy", "drag", "fling", "throw", "spin", "danika", "food_fx", "plugin"}),
+}
+# 插件能通过 tune() 调的参数(心情 / 好感要不要影响行为, 由插件决定; 本体只在这些决策点问一句):
+# 名字 -> (类型, 下限, 上限)。插件给的值不合法就用原值; 文档 docs/接口规范.md 有同一张表。
+TUNABLE = {
+    "idle_gap": ("float", 3.0, 600.0),          # 下一次空闲小动作隔多少秒
+    "idle_weights": ("weights", 0.0, 50.0),     # 空闲小动作各项权重 {happy look stretch hop wave walk sneak}
+    "bubble_gap": ("float", 5.0, 1800.0),       # 下一次随机冒泡隔多少秒
+    "bubble_pool": ("lines", None, None),       # 随机冒泡的台词池
+    "sleep_after": ("float", 15.0, 3600.0),     # 多久没人理就睡着(秒); ctx: edge
+    "food_refuse_p": ("float", 0.0, 1.0),       # 不爱吃 / 奇怪的东西直接推开的概率; ctx: key tier trait
+    "come_ok": ("bool", None, None),            # 叫她「过来~」肯不肯来
+    "hungry_remind": ("float", 0.0, 86400.0),   # 饿了提醒的间隔(秒), 0 = 本体不提醒(交给插件)
 }
 
 TRAY_QSS = """
@@ -591,6 +604,8 @@ class PetWindow(QWidget):
         # DLC 事件推送: LiveHub 由 PetApp 接上; 没接就是 None, emit_event 直接返回
         self._live = None; self._wake_why = None; self._spin_live = False
         self.food_fx = None; self._prank_last = {}     # 食物包: 正在进行的吃后效果 / 整蛊食物上次吃的时间
+        self.mood = Mood(self.stats, emit=lambda ev, **d: self.emit_event(ev, **d),
+                         away_sec=self.stats.away_hours * 3600.0)
         self._ix = interaction_hooks.load(self, log_error)   # 可选互动扩展 dlc/interactions/*.py; 没有就是空操作
 
         self.size_key = self.cfg["size"]
@@ -1062,7 +1077,7 @@ class PetWindow(QWidget):
             if self.focus_end is not None:
                 rem = self.focus_remaining()
                 parts.append(f"专注:{'暂停 ' if self.focus_paused else ''}{rem // 60:02d}:{rem % 60:02d}")
-            parts += self._ix.status_lines()          # 插件的状态行(如: 小心愿)
+            parts += self.plugin_status()              # 插件的状态行(如: 小心愿)
             self.tray.setToolTip("\n".join(parts))
         except Exception as e:
             log_error("tooltip", e)
@@ -1176,7 +1191,9 @@ class PetWindow(QWidget):
         if f.get("effect"):                     # 食物包的整蛊食物: 第一次不设防, 吃过一阵内再喂就拒绝
             refuse = now - self._prank_last.get(key, -1e9) < f.get("refuse_again_sec", 300)
         else:
-            refuse = bad and random.random() < (FOOD_REFUSE_WEIRD if tier == "weird" else FOOD_REFUSE_P)
+            refuse = bad and random.random() < self._tune("food_refuse_p",
+                                                          FOOD_REFUSE_WEIRD if tier == "weird" else FOOD_REFUSE_P,
+                                                          key=key, tier=tier, trait=f["trait"])
         if f.get("curious") and not self.stats.food_known(key) and not refuse:
             self.set_state("surprised", 1.8)    # 食物包的外界食物: 第一次见先好奇
             self.burst("quest", 1, at=self.head_point() + QPointF(self.char_w * 0.25, -8))
@@ -1603,6 +1620,13 @@ class PetWindow(QWidget):
             self._sulk_turn_away()
             self.quip(C.SULK_IGNORE_TEXTS, urgent=True)
             return
+        if not self._tune("come_ok", True):            # 插件说她这会儿不肯来(比如心情很糟)
+            cx = QCursor.pos().x() - (self.x() + self.width() / 2)
+            self.set_state("look_left" if cx > 0 else "look", 1.6)
+            self.kick(-1.0)
+            self.quip(C.COME_REFUSE_TEXTS, urgent=True)
+            self.emit_event("come_refused")
+            return
         if self.edge:
             self.leave_peek()
         if self.state == "sleep":
@@ -1642,8 +1666,11 @@ class PetWindow(QWidget):
                 self.set_state("happy", 2.0)
                 self.burst("heart", 3)
                 self.say(random.choice(C.COME_TEXTS))
+            elif kind == "approach":
+                self.set_state("happy", 1.6)
             elif kind == "stroll" and random.random() < 0.35:
                 self.set_state(random.choice(("look", "look_left")), 1.8)
+            self.emit_event("walk_end", kind=kind)
             return
         ramp = min(1.0, (t - w["t0"]) / 0.35)
         step = min(dist, w["speed"] * dt * (0.3 + 0.7 * ramp))
@@ -2334,12 +2361,11 @@ class PetWindow(QWidget):
                 self.burst("orbit", 3, bias=(0, 0))
             if state != "idle":
                 self.gaze = 0
-            if self._live is not None or self._ix.plugins:      # 事件: 状态切换 / 睡着 / 醒来(带原因)
-                self.emit_event("state", **{"from": prev, "to": state})
-                if state == "sleep":
-                    self.emit_event("sleep")
-                elif prev == "sleep":
-                    self.emit_event("wake", why=self._wake_why or ("drag" if self._dragging else "other"))
+            self.emit_event("state", **{"from": prev, "to": state})      # 事件: 状态切换 / 睡着 / 醒来(带原因)
+            if state == "sleep":
+                self.emit_event("sleep")
+            elif prev == "sleep":
+                self.emit_event("wake", why=self._wake_why or ("drag" if self._dragging else "other"))
         self._wake_why = None
         if duration:
             self.revert_timer.start(int(duration * 1000))
@@ -2351,10 +2377,10 @@ class PetWindow(QWidget):
         self.set_state("angry" if self.sulking() else "idle")
 
     def _schedule_happy(self):
-        self.happy_timer.start(int(random.uniform(*HAPPY_EVERY) * 1000))
+        self.happy_timer.start(int(self._tune("idle_gap", random.uniform(*HAPPY_EVERY)) * 1000))
 
     def _schedule_bubble(self):
-        self.bubble_timer.start(int(random.uniform(*BUBBLE_EVERY) * 1000))
+        self.bubble_timer.start(int(self._tune("bubble_gap", random.uniform(*BUBBLE_EVERY)) * 1000))
 
     def _idle_action(self):
         try:
@@ -2375,9 +2401,11 @@ class PetWindow(QWidget):
                     if random.random() < 0.3:
                         self.kick(1.0)
                 else:
-                    walk_w = 2.5 if self.cfg["walk"] else 0
-                    act = random.choices(("happy", "look", "stretch", "hop", "wave", "walk", "sneak"),
-                                         (3, 2.2, 1.2, 1.6, 1, walk_w, 1.4))[0]
+                    weights = self._tune("idle_weights", {"happy": 3, "look": 2.2, "stretch": 1.2, "hop": 1.6,
+                                                          "wave": 1, "walk": 2.5, "sneak": 1.4})
+                    if not self.cfg["walk"]:
+                        weights["walk"] = 0                  # 设置里关了散步: 插件也改不回来
+                    act = random.choices(list(weights), list(weights.values()))[0]
                     if act == "sneak":
                         self.start_sneak_eat()
                     elif act == "happy":
@@ -2418,7 +2446,7 @@ class PetWindow(QWidget):
                     pool += extra
             if self.stats.hunger < 30:
                 pool += C.HUNGRY_TEXTS * 2
-            self.say(random.choice(pool))
+            self.say(random.choice(self._tune("bubble_pool", pool)))
         self._schedule_bubble()
 
     def _greet(self):
@@ -2450,6 +2478,7 @@ class PetWindow(QWidget):
         self._check_presence()
         self._check_reminders()
         self.stats.tick(1.0)
+        self.mood.tick(1.0)
         if self._geo_tick % 10 == 0:
             self.stats.save()
         now = time.monotonic()
@@ -2466,7 +2495,7 @@ class PetWindow(QWidget):
         if self.focusing():
             self.note_interaction()          # 专注时她陪着你, 不睡
             return
-        limit = PEEK_SLEEP_SEC if self.edge else IDLE_SLEEP_SEC
+        limit = self._tune("sleep_after", PEEK_SLEEP_SEC if self.edge else IDLE_SLEEP_SEC, edge=bool(self.edge))
         idle_for = now - self.last_interaction
         if idle_for >= limit:
             self.bubble.hide()
@@ -2562,7 +2591,8 @@ class PetWindow(QWidget):
             self.burst("note", 3)
             self.say(f"现在是 {hr.hour} 点整~", force=True, tone="info")
             return
-        if self.stats.hunger < 25 and now - self._hungry_last > 1200 and self.state == "idle":
+        gap = self._tune("hungry_remind", 1200.0)
+        if gap > 0 and self.stats.hunger < 25 and now - self._hungry_last > gap and self.state == "idle":
             self._hungry_last = now
             self.emit_event("reminder", kind="hungry")
             self.burst("emoji", 1, text="🍙")
@@ -3567,6 +3597,52 @@ class PetWindow(QWidget):
             return False
         return not (blockers & (self.activities() if acts is None else acts))
 
+    def _tune(self, name, value, **ctx):
+        """决策点问插件要不要调这个参数(TUNABLE 里的名字); 没插件, 或插件给的值不合法, 就用原值"""
+        if not self._ix.plugins:
+            return value
+        kind, lo, hi = TUNABLE[name]
+        v = self._ix.tune(name, value, ctx)
+        if kind == "float":
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
+                return value
+            return max(lo, min(hi, float(v)))
+        if kind == "bool":
+            return v if isinstance(v, bool) else value
+        if kind == "weights":
+            if not isinstance(v, dict):
+                return value
+            out = dict(value)
+            for k, wv in v.items():
+                if k in out and isinstance(wv, (int, float)) and not isinstance(wv, bool) and wv == wv:
+                    out[k] = max(lo, min(hi, float(wv)))
+            return out if sum(out.values()) > 0 else value
+        if kind == "lines":
+            lines = [x for x in v if isinstance(x, str) and x.strip()] if isinstance(v, (list, tuple)) else []
+            return lines or value
+        return value
+
+    def plugin_status(self):
+        """插件报上来的状态行(status_text), 给托盘提示和右键卡片用"""
+        return self._ix.status_lines()
+
+    def approach_cursor(self):
+        """自己走到鼠标旁边(停在光标一侧, 不挡住它), 路上不说话; 到了推 walk_end(kind=approach)。
+        探头 / 睡着 / 闹别扭 / 设置里关了散步 / 已经在旁边了 -> 不走。返回是否出发"""
+        if self.edge or self.state == "sleep" or self.sulking() or not self.cfg["walk"]:
+            return False
+        cur = QCursor.pos()
+        side = -1 if cur.x() > self.x() + self.width() / 2 else 1          # 停在她来的那一侧
+        tx = cur.x() + side * self.char_w * 0.75 - self.width() / 2
+        ty = cur.y() - (self.pad_top() + self.char_h * 0.62)
+        scr = QGuiApplication.screenAt(cur) or QGuiApplication.primaryScreen()
+        g = scr.availableGeometry()
+        tx = max(g.left() - self.pad_x, min(tx, g.left() + g.width() - self.width() + self.pad_x))
+        ty = max(g.top() - self.hop_room, min(ty, g.top() + g.height() - self.height() + PAD))
+        if math.hypot(tx - self.x(), ty - self.y()) < self.char_w * 0.6:
+            return False
+        return self.start_walk(QPointF(tx, ty), kind="approach")
+
     def clear_sulk(self):
         """悄悄结束闹别扭(不说话、不加好感、不推 makeup); 要台词和 +1 走原版消气"""
         self._sulk_until = 0.0
@@ -3656,6 +3732,8 @@ class PetWindow(QWidget):
             "size": self.size_key,
             "visible": bool(self.isVisible()),
             "edge": self.edge,
+            "mood": round(self.mood.value, 1),
+            "mood_band": self.mood.key,
             "sleeping": self.state == "sleep",
             "dragging": bool(self._dragging),
             "spinning": self.spin_rem > 0.5,
@@ -3676,6 +3754,10 @@ class PetWindow(QWidget):
     def emit_event(self, _ev, **data):
         """推一条事件给互动插件(on_event)和已订阅的 DLC。都没有就立刻返回; 绝不往外抛。
         (事件名参数叫 _ev, 好让附加字段能用 name/key 等名字)"""
+        try:
+            self.mood.on_event(_ev, data)             # 心情先算(可能接着推一个 "mood" 换档事件)
+        except Exception as e:
+            log_error("mood " + str(_ev), e)
         if self._ix.plugins:
             self._ix.event(_ev, data)
         hub = self._live

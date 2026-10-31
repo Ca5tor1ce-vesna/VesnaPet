@@ -8,6 +8,8 @@
   on_event(name, data)          她身上发生的每个事件(和 live 管道推给 DLC 的同一套, 见文档); 只通知, 返回值不管
   busy() -> str | None          插件正在进行的活动名(如 "vomit"); 非空时并进 pet.activities(), 原版的自动行为会让路。
                                 不要在 busy() 里调 pet.activities()(会递归)
+  tune(name, value, ctx) -> v   本体在决策点问插件要不要调参数(main.TUNABLE 里的名字); 返回新值, None = 不改。
+                                心情 / 好感要不要影响行为, 全靠这个; 多个插件按 priority 依次传下去
   on_pet() -> bool              摸头时先问插件; True = 插件接管(原版摸头效果不执行)
   on_click(double) -> bool      单击/双击时先问插件(double=True 是双击); True = 插件接管(原版的戳/跳不执行)
   on_spin_queasy(now) -> bool   转圈转到顶、即将生气时调用; 返回 True 表示插件接管(原版的生气逻辑不执行)
@@ -18,8 +20,6 @@
   on_wheel(event) -> bool        滚轮转圈前先问插件; True = 插件吃掉(不转、不攒晕度)
   on_context_menu(event) -> bool 右键菜单弹出前先问插件; True = 不弹
   status_text() -> str | None   插件想显示的一行状态(托盘提示、右键卡片的状态行), 如「小心愿: 想吃甜的」
-  status_bars() -> [dict]       像饱腹那样的进度条: {key, emoji, title, frac(0-1), text, colors(两个 #色值)};
-                                小屋状态页和右键卡片目前只放得下一条(按插件加载顺序取第一条)
   menu_items() -> [(emoji, label, fn)]  往右键菜单(和托盘「互动」子菜单)注册菜单项
   settings_rows() -> [dict]     往设置面板「扩展」区注册行: {key, emoji, title, desc, control(QWidget), sync(可选)}
 """
@@ -85,6 +85,20 @@ class Hub:
                     self._err("busy", e, pl)
         return out
 
+    def tune(self, name, value, ctx):
+        """决策点: 依次问插件(priority 大的先), 每个插件拿到上一个改过的值; 返回最终值(本体再校验)"""
+        for pl in sorted(self.plugins, key=lambda x: -getattr(x, "priority", 0)):
+            f = getattr(pl, "tune", None)
+            if f is None:
+                continue
+            try:
+                v = f(name, value, dict(ctx))
+                if v is not None:
+                    value = v
+            except Exception as e:
+                self._err("tune " + str(name), e, pl)
+        return value
+
     def status_lines(self):
         """插件的状态行; 都没有就是空列表"""
         out = []
@@ -97,26 +111,6 @@ class Hub:
                         out.append(str(txt))
                 except Exception as e:
                     self._err("status_text", e, pl)
-        return out
-
-    def status_bars(self):
-        """插件的状态条(像饱腹那样); 字段不全的补默认, 出错的插件停用"""
-        out = []
-        for pl in list(self.plugins):
-            f = getattr(pl, "status_bars", None)
-            if f is None:
-                continue
-            try:
-                for b in (f() or []):
-                    if not isinstance(b, dict) or "frac" not in b:
-                        continue
-                    colors = [str(c) for c in (b.get("colors") or ())][:2]
-                    out.append(dict(key=str(b.get("key", "")), emoji=str(b.get("emoji", "")),
-                                    title=str(b.get("title", "")), text=str(b.get("text", "")),
-                                    frac=max(0.0, min(1.0, float(b["frac"]))),
-                                    colors=tuple(colors) if len(colors) == 2 else ("#4FC7B5", "#FF8FB1")))
-            except Exception as e:
-                self._err("status_bars", e, pl)
         return out
 
     def step(self, t):

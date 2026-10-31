@@ -73,6 +73,7 @@ BUTTERFLY_LINE = {
     "landed": "蝴蝶落在了她头上",
     "giveup": "她追蝴蝶没追上，有点失落",
 }
+MOOD_NAME = {"great": "超开心", "good": "不错", "ok": "平平", "low": "有点低落", "bad": "很糟"}
 RPS_LINE = {
     "win": "你和她猜拳赢了，她不服气（互动）",
     "lose": "你和她猜拳输了，她得意洋洋（互动）",
@@ -142,6 +143,12 @@ def event_line(ev):
         if ev.get("asleep"):
             return "她睡着时你给她浇了水，她被浇醒气坏了（互动）"
         return "你想给她浇水，被她躲开了（互动）" if ev.get("dodged") else None
+    if name == "mood":
+        return f"她的心情变成了「{MOOD_NAME.get(ev.get('band'), '')}」"
+    if name == "approach":
+        return "她饿了，自己走到你旁边要吃的（主动）" if ev.get("why") == "hungry" else "她自己走过来陪你（主动）"
+    if name == "come_refused":
+        return "你叫她过来，她不肯动（互动）"
     if name == "rage_poke":
         if ev.get("undo"):
             return "你快把她哄好了，又戳了她一下，前功尽弃（互动）"
@@ -438,6 +445,7 @@ class PetWatch(QObject):
             "hunger": s.get("hunger"),
             "affection": s.get("affection"),
             "level": s.get("level"),
+            "mood": MOOD_NAME.get(s.get("mood_band"), ""),
             "grok": s.get("grok") or "",
             "focusing": bool(s.get("focusing")),
             "sleeping": bool(s.get("sleeping")),

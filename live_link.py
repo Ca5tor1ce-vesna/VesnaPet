@@ -17,7 +17,7 @@
 
 桌宠 -> 客户端:
   ping: {"v":1,"ok":true,"pong":true,"proto":2,"caps":["get","subscribe","say"]}
-  get:  {"v":1,"ok":true, ...快照字段}            (字段与 v1 完全相同)
+  get:  {"v":1,"ok":true, ...快照字段}            (v1 字段都在; 后来只加不改, 如 mood / mood_band)
   subscribe: {"v":2,"ok":true,"subscribed":true}
   say:  {"v":2,"ok":true}  或  {"v":2,"ok":false,"err":"rate"|"busy"|"muted"|"hidden"|"empty"}
   未知: {"v":1,"ok":false,"err":"unknown"}
@@ -46,9 +46,10 @@ say 规则:
   rps(result: win|lose|draw, 从你的角度) / fortune(tier, fresh)
   focus_start(minutes) / focus_end(minutes, done) / reminder(kind: water|sit|chime|hungry)
   user_away(idle) / user_back(away)   你离开电脑 / 回来(只有 Windows 有)
+  mood(band: great|good|ok|low|bad, value, old)   心情换档 / walk_end(kind: stroll|come|approach) / come_refused
   插件发的: watered(dodged, asleep, forced) / comforted(was_sulking, after, gain) / companion_bonus(count, gain, minutes)
      / vomit(why, hunger_drop, hunger, affection_drop) / wish(stage: start|done|miss|cancel, kind, ...)
-     / rage_poke(pokes, double, undo, blew) / memory(kind: recap|life, text)
+     / rage_poke(pokes, double, undo, blew) / memory(kind: recap|life, text) / approach(why: hungry|company)
   同一套事件也会通知互动插件(on_event); 完整说明和字段见 docs/接口规范.md。
 
 同时最多 4 个连接; 单行最多 4KB; 写缓冲超过 64KB 则断开(推送也一样, 慢客户端会被断开)。
