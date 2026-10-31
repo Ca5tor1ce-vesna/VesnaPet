@@ -557,16 +557,21 @@ class _Stat(QWidget):
 
 
 class _Codex(QWidget):
-    """表情图鉴格子"""
+    """表情图鉴格子; 列哪几格由 pet.codex() 决定(新加的脸要真有图才列)。格子多了就压矮一点, 再多就排 7 列"""
     CW, CH, COLS = 56, 74, 6
 
-    def __init__(self, parent, pet):
+    def __init__(self, parent, pet, max_h=346):
         super().__init__(parent)
         self.pet = pet
+        self.entries = pet.codex()
         self.hover = -1
         self.thumbs = {}
         self.setMouseTracking(True)
-        rows = math.ceil(len(C.CODEX) / self.COLS)
+        n = len(self.entries)
+        if n > 30:
+            self.COLS, self.CW = 7, 49
+        rows = max(1, math.ceil(n / self.COLS))
+        self.CH = max(self.CW + 13, min(74, max_h // rows))
         self.setFixedSize(self.CW * self.COLS, self.CH * rows)
         self.on_hover = None
 
@@ -594,7 +599,7 @@ class _Codex(QWidget):
 
     def mouseMoveEvent(self, e):
         i = int(e.position().y() // self.CH) * self.COLS + int(e.position().x() // self.CW)
-        i = i if 0 <= i < len(C.CODEX) else -1
+        i = i if 0 <= i < len(self.entries) else -1
         if i != self.hover:
             self.hover = i
             self.update()
@@ -611,7 +616,7 @@ class _Codex(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         st = self.pet.stats
-        for i, (key, name, hint) in enumerate(C.CODEX):
+        for i, (key, name, hint) in enumerate(self.entries):
             x, y = (i % self.COLS) * self.CW, (i // self.COLS) * self.CH
             locked = not st.seen(key)
             box = QRectF(x + 3, y + 2, self.CW - 6, self.CW - 6)
@@ -812,7 +817,7 @@ class HomePanel(CardWindow):
         w = self.area.width()
         self.codex_bar = Bar(pg, (MINT, LAV), 8)
         self.codex_bar.setGeometry(0, 28, w, 8)
-        self.codex = _Codex(pg, self.pet)
+        self.codex = _Codex(pg, self.pet, max_h=pg.height() - 48 - 30)
         self.codex.move((w - self.codex.width()) // 2, 48)
         self.codex_hint = Label("把鼠标放到格子上看解锁提示", pg, 12, INK2, align=Qt.AlignCenter, h=22)
         self.codex_hint.setGeometry(0, 48 + self.codex.height() + 6, w, 22)
@@ -824,16 +829,17 @@ class HomePanel(CardWindow):
         if i < 0:
             self.codex_hint.set_text("把鼠标放到格子上看解锁提示")
             return
-        key, name, hint = C.CODEX[i]
+        key, name, hint = self.codex.entries[i]
         if self.pet.stats.seen(key):
             self.codex_hint.set_text(f"「{name}」已收集 ✓")
         else:
             self.codex_hint.set_text(f"提示:{hint}")
 
     def _refresh_codex(self):
-        n = sum(1 for k, _, _ in C.CODEX if self.pet.stats.seen(k))
-        self.codex_title.set_text(f"🖼️ 表情图鉴  {n} / {len(C.CODEX)}")
-        self.codex_bar.set_value(n / len(C.CODEX))
+        entries = self.codex.entries
+        n = sum(1 for k, _, _ in entries if self.pet.stats.seen(k))
+        self.codex_title.set_text(f"🖼️ 表情图鉴  {n} / {len(entries)}")
+        self.codex_bar.set_value(n / max(1, len(entries)))
         self.codex.thumbs.clear()
         self.codex.update()
 

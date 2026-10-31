@@ -43,6 +43,11 @@ EXTRA_STATES = {"wave": "happy", "stretch": "happy", "yawn": "sleep", "cheer": "
                 "focus": "idle", "love": "happy"}
 STATES = CORE_STATES + tuple(EXTRA_STATES)
 PEEK_EXTRA = {"peek_happy": "peek_awake", "peek_surprised": "peek_awake"}
+# 只换脸的表情: 不是新状态。状态还是右边那个(动作、计时、互动规则全照旧), 只是这会儿画这张图;
+# assets 里没有这张图就照常画右边那个状态的图。谁来换: set_state(..., expr=) / stand_key 自己判断 / 插件 expr()
+FACES = {"pout": "shy", "smug": "content", "hungry": "idle", "queasy": "dizzy",
+         "sulk": "angry", "held": "surprised", "yuck": "angry", "wet": "angry"}
+HUNGRY_FACE = 25                # 饱腹低于这个, 站着发呆时换成「饿了」那张
 
 # ---------------- 可调参数 ----------------
 SIZES = {"small": 140, "medium": 200, "large": 300}
@@ -125,6 +130,7 @@ LIVE_SAY_EXPRS = ("happy", "angry", "surprised", "shy", "love", "content", "chee
                   "idle", "focus")
 LIVE_SAY_CALM = ("idle", "look", "look_left", "happy", "content", "shy", "wave", "love", "cheer", "surprised",
                  "focus")
+LIVE_SAY_FACES = ("pout", "smug")       # DLC 也能要这两张脸(状态用 FACES 里对应的那个)
 
 # ---------------- 活动 / 互动矩阵 ----------------
 # activities() 返回她此刻在做的事(下面这些名字, 外加插件 busy() 报上来的名字)。
@@ -259,7 +265,7 @@ def load_frames():
         if img.isNull():
             raise FileNotFoundError(f"缺少素材: {ASSET_DIR / (s + '.png')}")
         imgs[s] = img.convertToFormat(QImage.Format_ARGB32)
-    for s in EXTRA_STATES:
+    for s in tuple(EXTRA_STATES) + tuple(FACES):
         try:
             img = _load_optional(s, imgs["idle"].size())
             if img is not None:
@@ -272,7 +278,7 @@ def load_frames():
         box = r if box is None else box.united(r)
     frames = {s: QPixmap.fromImage(img.copy(box)) for s, img in imgs.items()}
     real = set(frames)
-    _resolve_fallbacks(frames, EXTRA_STATES)
+    _resolve_fallbacks(frames, {**EXTRA_STATES, **FACES})
     return frames, real
 
 
@@ -531,6 +537,7 @@ class PetWindow(QWidget):
         self._ducking = False
         self._cache = {}
         self.state = "idle"
+        self._expr = self._expr_state = None      # set_state(expr=) 指定的脸, 只在那个状态里有效
         self.state_since = time.monotonic()
         self.last_interaction = time.monotonic()
         self.clicks = deque(maxlen=8)
@@ -714,6 +721,10 @@ class PetWindow(QWidget):
                 self._codex_peek = pf = load_peek_frames()
             return pf.get(key) if pf else None
         return self.frames.get(key)
+
+    def codex(self):
+        """图鉴里列哪几格: 原来的都列; 只换脸的表情(FACES)要 assets 里真有图才列"""
+        return [e for e in C.CODEX if e[0] not in FACES or e[0] in self.real_frames]
 
     # ----- 菜单 / 面板 -----
     def _build_tray_menu(self):
@@ -1145,7 +1156,7 @@ class PetWindow(QWidget):
         self.emit_event("rps", result=res)
         if res == "win":
             self.stats.inc("rps_win")
-            self.set_state("angry", 1.6)
+            self.set_state("angry", 1.6, expr="pout")
             self.sfx.play("hmph")
             self.say(random.choice(["呜……再来!", "哼,这次是我让着你~"]), force=True)
         elif res == "lose":
@@ -1236,7 +1247,10 @@ class PetWindow(QWidget):
         self.emit_event("feed", key=key, name=f["name"], tier=tier, trait=trait,
                         reaction="refuse" if refuse else tier, first=bool(first))
         if refuse:                                          # 推开不吃
-            self.set_state("angry" if tier == "dislike" else "surprised", 2.0)
+            if tier == "dislike":
+                self.set_state("angry", 2.0, expr="yuck")
+            else:
+                self.set_state("surprised", 2.0)
             self.kick(-1.4)
             side = 1 if (QCursor.pos().x() < self.x() + self.width() / 2) else -1
             self.burst("emoji", 1, at=m, bias=(side * -520, -60), text=f["emoji"], pm=food_pixmap(key, 40))
@@ -1295,7 +1309,7 @@ class PetWindow(QWidget):
             self.say(self.pick_line(f["lines"] if random.random() < 0.75 else C.FOOD_OK_TEXTS), force=True)
             self.gain(2, "feed", quiet=True)
         elif trait == "spicy":                              # 辣!
-            self.set_state("angry", 2.8)
+            self.set_state("angry", 2.8, expr="yuck")
             self.burst("steam", 9, at=hp + QPointF(0, -10), bias=(0, 0))
             self.burst("emoji", 3, at=m, text="🔥")
             self.burst("sweat", 4)
@@ -1307,7 +1321,7 @@ class PetWindow(QWidget):
             QTimer.singleShot(4400, lambda: self._food_say(C.FOOD_SPICY_AFTER_TEXTS))
             self._note_dislike(now, quiet_until=6.0)
         elif trait == "dark":                               # 黑暗料理: 吃完头晕
-            self.set_state("dizzy", 2.6)
+            self.set_state("dizzy", 2.6, expr="queasy")
             self.burst("emoji", 1, at=hp + QPointF(0, -14), text="💀")
             self.burst("puff", 6, at=m, bias=(0, 0))
             self.sfx.play("huh")
@@ -1315,7 +1329,7 @@ class PetWindow(QWidget):
             QTimer.singleShot(3200, lambda: self._food_say(C.FOOD_DARK_AFTER_TEXTS))
             self._note_dislike(now, quiet_until=5.0)
         else:                                               # 蔬菜 / 苦: 皱着脸勉强吃
-            self.set_state("shy" if trait == "veggie" else "angry", 2.4)
+            self.set_state("shy" if trait == "veggie" else "angry", 2.4, expr="yuck")
             self.burst("sweat", 3)
             if trait == "bitter":
                 self.burst("anger", 1, at=hp + QPointF(self.char_w * 0.25, -10))
@@ -1420,7 +1434,7 @@ class PetWindow(QWidget):
             self.stop_walk()
         if why == "giveup":
             self.emit_event("butterfly", stage="giveup")
-            self.set_state("shy", 2.2)            # 噘嘴失落, 不是生气
+            self.set_state("shy", 2.2, expr="pout")            # 噘嘴失落, 不是生气
             self.burst("sweat", 2)
             self.say(random.choice(C.BUTTERFLY_GIVEUP_TEXTS), force=True, duration=2.8)
 
@@ -2359,10 +2373,15 @@ class PetWindow(QWidget):
              "sleep": -0.8, "stretch": 3.6, "yawn": 1.0, "idle": 0.6, "look": 0.4, "look_left": 0.4,
              "eat": -1.0, "content": -1.4, "shy": -1.2, "focus": 0.5, "love": 2.6}
 
-    def set_state(self, state, duration=None, why=None):
-        """换表情; duration 秒后回 idle(闹别扭时回 angry)。why: 从睡着换走时, wake 事件里记的醒来原因"""
+    def set_state(self, state, duration=None, why=None, expr=None):
+        """换表情; duration 秒后回 idle(闹别扭时回 angry)。why: 从睡着换走时, wake 事件里记的醒来原因。
+        expr: 这段时间画哪张脸(FACES 里的名字, 如 set_state("angry", 2.8, expr="yuck")); 状态本身照旧,
+        没那张图就画状态的图。下一次 set_state 就清掉"""
         if state not in STATES:
             raise ValueError(state)
+        if expr is not None and expr not in self.frames:
+            raise ValueError(expr)
+        self._expr, self._expr_state = expr, state
         if why is not None:
             self._wake_why = why
         prev = self.state
@@ -2693,7 +2712,7 @@ class PetWindow(QWidget):
         self._sneak_until = 0.0
         if self.state not in ("eat", "idle", "content", "happy"):
             return
-        self.set_state("content", 2.2)
+        self.set_state("content", 2.2, expr="smug")
         self.burst("sparkle", 3)
         self.say(self.pick_line(self._tune("sneak_done_lines", C.SNEAK_SMUG_TEXTS)), force=True, duration=2.4,
                  tone="happy")
@@ -3412,14 +3431,28 @@ class PetWindow(QWidget):
         self.say(f"📖 图鉴解锁:「{name}」", duration=3.0, tone="info")
 
     def stand_key(self):
+        """这一帧画哪张图: 状态本身, 或这会儿该换的脸(FACES); 插件的 expr() 最后还能再换"""
         st = self.state
-        if st == "idle" and not self.walk:
+        key = st
+        if self._expr is not None and self._expr_state == st:
+            key = self._expr
+        elif st == "idle" and not self.walk:
             if self.gaze and abs(self.face) > 0.5:
                 g = self.gaze * (1 if self.face > 0 else -1)
-                return "look" if g > 0 else "look_left"
-            if self.focusing():
-                return "focus"
-        return st
+                key = "look" if g > 0 else "look_left"
+            elif self.focusing():
+                key = "focus"
+            elif self.stats.hunger < HUNGRY_FACE:
+                key = "hungry"
+        elif st == "angry" and self.sulking():
+            key = "sulk"
+        elif st == DRAG_STATE and (self._dragging or self.fling):
+            key = "held"
+        if self._ix.plugins:
+            k2 = self._ix.expr(key, st)
+            if k2 in self.frames:
+                key = k2
+        return key
 
     def _paint_stand(self, p: QPainter, t: float):
         key = self.stand_key()
@@ -3799,9 +3832,11 @@ class PetWindow(QWidget):
         if not text:
             return "empty"
         sec = max(1.0, min(8.0, float(sec)))
-        if (expr in LIVE_SAY_EXPRS and expr in self.real_frames and not self.sulking()
+        face = expr if expr in LIVE_SAY_FACES else None
+        state = FACES[face] if face else expr
+        if (state in LIVE_SAY_EXPRS and expr in self.real_frames and not self.sulking()
                 and self.state in LIVE_SAY_CALM):
-            self.set_state(expr, sec)           # 临时表情: 到点由 revert_timer 回 idle(闹别扭则回 angry)
+            self.set_state(state, sec, expr=face)   # 临时表情: 到点由 revert_timer 回 idle(闹别扭则回 angry)
         dur = max(sec, min(8.0, 1.6 + len(text) * 0.12))
         self.say(text, force=True, duration=dur, src="dlc")
         return None

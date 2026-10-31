@@ -14,6 +14,9 @@
   on_click(double) -> bool      单击/双击时先问插件(double=True 是双击); True = 插件接管(原版的戳/跳不执行)
   on_spin_queasy(now) -> bool   转圈转到顶、即将生气时调用; 返回 True 表示插件接管(原版的生气逻辑不执行)
   step(t)                       每帧调用
+  expr(key, state) -> str | None 每帧画立绘前问: 要不要换一张脸(main.FACES 里的名字, 如超级生气时换 "wet")。
+                                key 是本体选好的图, state 是状态; None = 不换。多个插件按 priority 依次传下去。
+                                只换图, 状态和逻辑不变; 那张图不存在就照常画
   paint(key, pm, t) -> (pm, dx) 画立绘前调用, 可替换图/加水平抖动
   on_say(text, src)             她冒台词气泡时通知
   on_mouse_press(event) -> bool 鼠标按下(任意键)先问插件; True = 插件吃掉这次按下
@@ -100,6 +103,20 @@ class Hub:
             except Exception as e:
                 self._err("tune " + str(name), e, pl)
         return value
+
+    def expr(self, key, state):
+        """每帧问插件换不换脸: priority 大的先, 每个拿到上一个换过的; 返回最终的(本体再校验有没有这张图)"""
+        for pl in sorted(self.plugins, key=lambda x: -getattr(x, "priority", 0)):
+            f = getattr(pl, "expr", None)
+            if f is None:
+                continue
+            try:
+                k = f(key, state)
+                if k:
+                    key = str(k)
+            except Exception as e:
+                self._err("expr", e, pl)
+        return key
 
     def state_texts(self):
         """插件管的短暂状态的一句话(超级生气、转吐……); 都没有就是空列表"""

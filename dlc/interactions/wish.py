@@ -165,6 +165,7 @@ class Wish:
             p.stats.inc("wish_missed")
             if free:
                 p.kick(-1.0)
+                p.set_state("shy", 2.4, expr="pout")
                 p.say(random.choice(MISS_LINES), duration=3.0, src="wish")
         elif not c["hinted"] and el >= ANSWER_SEC / 2 and free:
             c["hinted"] = True

@@ -62,6 +62,12 @@ class Water:
         self._glow_cache = {}
         self.nospin_next = 0.0
 
+    def expr(self, key, state):
+        """被浇 / 超级生气这段时间, 生气的脸换成湿漉漉那张(assets 里没有 wet.png 就照常)"""
+        if (self.rage is not None or self.force is not None) and state == "angry":
+            return "wet"
+        return None
+
     def state_text(self):
         """小屋头部那句话"""
         if self.force is not None:
@@ -405,7 +411,7 @@ class Water:
         def angry():
             if p.state == "sleep" or p.dragging or p.fling is not None:
                 return
-            p.set_state("angry", 3.0)
+            p.set_state("angry", 3.0, expr="wet")
             p.sfx.play("hmph")
             p.burst("anger", 2, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
             self._say(WET_LINES, 3.0)
