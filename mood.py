@@ -80,7 +80,16 @@ def event_delta(name, d):
         return "fortune", 3.0 if d.get("tier") in ("大吉", "中吉") else 0.0
     if name == "double_click":
         return "jump", 1.0
+    if name == "combed":
+        return "comb", 4.0 if d.get("messy") else 1.0
+    if name in TENDER:
+        return TENDER[name]
     return None, 0.0
+
+
+# 温柔互动(dlc/interactions/tender.py)推的事件: 名字 -> (类别, 心情变化)
+TENDER = {"carried": ("carry", 4.0), "pet_lean": ("lean", 3.0), "tucked": ("tuck", 2.0), "woke_tucked": ("tuck", 5.0),
+          "waved_back": ("wave", 3.0), "goodnight": ("night", 3.0), "praised": ("praise", 3.0)}
 
 
 def band_of(m):

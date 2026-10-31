@@ -53,6 +53,7 @@ say 规则:
      / vomit(why, hunger_drop, hunger, affection_drop) / wish(stage: start|done|miss|cancel, kind, ...)
      / rage_poke(pokes, double, undo, blew) / memory(kind: recap|life, text) / approach(why: hungry|company)
      / weak_hop(hunger)
+  插件发的(tender): carried(sec) / pet_lean / combed(messy, sulk) / tucked / woke_tucked / waved_back / goodnight / praised(n)
   同一套事件也会通知互动插件(on_event); 完整说明和字段见 docs/接口规范.md。
 
 同时最多 4 个连接; 单行最多 4KB; 写缓冲超过 64KB 则断开(推送也一样, 慢客户端会被断开)。

@@ -178,6 +178,7 @@ TUNABLE = {
     "greet_lines": ("lines", None, None),       # 你离开一阵回来, 她迎接你说的那句; ctx: long(离开很久), level
     "greet_cheer": ("bool", None, None),        # 迎接时(好友起)要不要欢呼、蹦、冒爱心; False = 只挥挥手
     "status_line": ("text", 1, 20),             # 小屋头部「没事时」那句; ctx: kind(hungry|butterfly|level), level
+    "drag_hold_rate": ("float", 0.0, 2.0),      # 拖着她时挣扎计时走多快(1 = 原版; 0.25 = 慢慢来); ctx: held(真实秒数), stage
     "hungry_remind": ("float", 0.0, 86400.0),   # 饿了提醒的间隔(秒), 0 = 本体不提醒(交给插件)
     "sneak_done_lines": ("lines", None, None),  # 偷吃没被发现, 吃完得意的那句的台词池
     "sneak_caught_lines": ("lines", None, None),  # 偷吃被你点到, 害羞否认的那句的台词池
@@ -595,7 +596,9 @@ class PetWindow(QWidget):
         self._wake_drag = False          # 这次拖拽是把她从睡梦里拎起来的
         self._wake_rude_last = -1e9      # 上次因粗暴叫醒扣好感
         self._spin_wake_grace = 0.0      # 转醒后的滚轮宽限期
-        self._drag_hold_t0 = 0.0         # 开始拖住的时间
+        self._drag_hold_t0 = 0.0         # 开始拖住的时间(挣扎计时; drag_hold_rate 会让它走慢 / 走快)
+        self._drag_since = 0.0           # 真正开始拖住的时间
+        self._drag_rate, self._drag_rate_at = 1.0, 0.0
         self._drag_hold_stage = 0        # 0未喊 / 1轻 / 2重 / 3激烈 / 4风元素
         self._drag_hold_peak = 0         # 这次拖拽达到过的最高阶段(松手后还要用)
         self._drag_hold_fx = 0.0         # 激烈/风元素阶段特效节流
@@ -2101,6 +2104,12 @@ class PetWindow(QWidget):
                 self._drag_vx *= math.exp(-5 * dt)
                 target = max(-14.0, min(14.0, -self._drag_vx * 0.012))
                 if self._drag_hold_t0:
+                    if t >= self._drag_rate_at:        # 每 0.2 秒问一次插件: 挣扎计时走多快(轻轻抱着就慢)
+                        self._drag_rate_at = t + 0.2
+                        self._drag_rate = self._tune("drag_hold_rate", 1.0, held=round(t - self._drag_since, 1),
+                                                     stage=self._drag_hold_stage)
+                    if self._drag_rate != 1.0:
+                        self._drag_hold_t0 = min(t, self._drag_hold_t0 + (1.0 - self._drag_rate) * dt)
                     held = t - self._drag_hold_t0
                     if held >= DRAG_HOLD_SEC:
                         # 越拖越用力挣扎, 但绝不自己挣脱/落地 — 仍由用户拖着
@@ -3195,7 +3204,8 @@ class PetWindow(QWidget):
             delta = cur - self._press
             if not self._dragging and (abs(delta.x()) > DRAG_THRESHOLD or abs(delta.y()) > DRAG_THRESHOLD):
                 self._dragging = True
-                self._drag_hold_t0 = time.monotonic()
+                self._drag_hold_t0 = self._drag_since = time.monotonic()
+                self._drag_rate, self._drag_rate_at = 1.0, 0.0
                 self._drag_hold_stage = 0
                 self._drag_hold_fx = 0.0
                 self.setCursor(Qt.ClosedHandCursor)
@@ -3244,7 +3254,7 @@ class PetWindow(QWidget):
             return
         was_drag = self._dragging
         peak = self._drag_hold_peak
-        held = (time.monotonic() - self._drag_hold_t0) if self._drag_hold_t0 else 0.0
+        held = (time.monotonic() - self._drag_since) if self._drag_hold_t0 else 0.0     # 真实拖了多久
         self._press = None
         self._dragging = False
         self._drag_hold_t0 = 0.0

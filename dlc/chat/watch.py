@@ -159,6 +159,25 @@ def event_line(ev):
         return "她正超级生气，你还去戳她（互动）" if ev.get("pokes") == 1 else None
     if name == "comforted":
         return "她生气时你摸了摸她的头，她别扭地消气了（互动）"
+    if name == "carried":
+        return "你轻轻抱着她走了一段，她不扑腾了，放下时还道了谢（互动）"
+    if name == "pet_lean":
+        return "你一直摸她的头，她靠过来蹭了蹭你的手（互动）"
+    if name == "combed":
+        if ev.get("sulk"):
+            return "她闹别扭时你帮她把乱掉的头发梳顺了，她原谅你了（互动）"
+        return "你帮她把乱掉的头发梳顺了（互动）" if ev.get("messy") else "你帮她梳了梳头（互动）"
+    if name == "tucked":
+        return "她睡着时你给她盖了小被子（互动）"
+    if name == "woke_tucked":
+        return "她醒来发现盖着你给的被子，向你道谢（互动）"
+    if name == "waved_back":
+        return "她冲你挥手，你也回应了她（互动）"
+    if name == "goodnight":
+        return "你跟她道了晚安，准备关掉桌宠（互动）"
+    if name == "praised":
+        n = ev.get("n") or 1
+        return "你夸了她，她害羞了（互动）" if n == 1 else (f"你连着夸了她 {n} 句，她不好意思极了（互动）" if n >= 3 else None)
     if name == "companion_bonus":
         return "你陪了她很久，她别扭地说了句心里话（互动）"
     if name == "vomit":
