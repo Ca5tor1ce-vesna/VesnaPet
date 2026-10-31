@@ -174,6 +174,10 @@ TUNABLE = {
     "sleep_after": ("float", 15.0, 3600.0),     # 多久没人理就睡着(秒); ctx: edge
     "food_refuse_p": ("float", 0.0, 1.0),       # 不爱吃 / 奇怪的东西直接推开的概率; ctx: key tier trait
     "come_ok": ("bool", None, None),            # 叫她「过来~」肯不肯来
+    "come_refuse_lines": ("lines", None, None), # 不肯过来时说的那句
+    "greet_lines": ("lines", None, None),       # 你离开一阵回来, 她迎接你说的那句; ctx: long(离开很久), level
+    "greet_cheer": ("bool", None, None),        # 迎接时(好友起)要不要欢呼、蹦、冒爱心; False = 只挥挥手
+    "status_line": ("text", 1, 20),             # 小屋头部「没事时」那句; ctx: kind(hungry|butterfly|level), level
     "hungry_remind": ("float", 0.0, 86400.0),   # 饿了提醒的间隔(秒), 0 = 本体不提醒(交给插件)
     "sneak_done_lines": ("lines", None, None),  # 偷吃没被发现, 吃完得意的那句的台词池
     "sneak_caught_lines": ("lines", None, None),  # 偷吃被你点到, 害羞否认的那句的台词池
@@ -1002,7 +1006,7 @@ class PetWindow(QWidget):
         self.say(C.LEVEL_UP.format(name=name), force=True, duration=5.0, tone="happy")
 
     def mood_text(self):
-        """小屋头部那句话: 正在发生什么就说什么(插件管的状态最先), 没事时和原来一样按好感说"""
+        """小屋头部那句话: 正在发生什么就说什么(插件管的状态最先), 没事时和原来一样按好感说(插件可用 status_line 换)"""
         st = self.stats
         for text in self._ix.state_texts():             # 插件管的状态(超级生气、转吐……)
             return text
@@ -1021,13 +1025,15 @@ class PetWindow(QWidget):
             return C.STATUS_STATE_TEXTS[self.state]
         if "walk" in acts:
             return C.STATUS_WALK_TEXT
-        if st.hunger < 25:
-            return "肚子咕咕叫,想吃东西~"
-        if self.butterfly.active():
-            return "在看小蝴蝶飞来飞去~"
         lv = st.level()[0]
-        return ["有点害羞,还在熟悉你~", "觉得和你待着很舒服", "把你当成好朋友啦",
-                "每天都想见到你~", "你是她最重要的人之一", "和你缔结了心之契约 ✦"][min(lv, 6) - 1]
+        if st.hunger < 25:
+            kind, text = "hungry", "肚子咕咕叫,想吃东西~"
+        elif self.butterfly.active():
+            kind, text = "butterfly", "在看小蝴蝶飞来飞去~"
+        else:
+            kind, text = "level", ["有点害羞,还在熟悉你~", "觉得和你待着很舒服", "把你当成好朋友啦",
+                                   "每天都想见到你~", "你是她最重要的人之一", "和你缔结了心之契约 ✦"][min(lv, 6) - 1]
+        return self._tune("status_line", text, kind=kind, level=lv)     # 插件可以换(比如心情跌到谷底时)
 
     # ----- 专注计时 -----
     def start_focus(self, mins):
@@ -1654,7 +1660,7 @@ class PetWindow(QWidget):
             cx = QCursor.pos().x() - (self.x() + self.width() / 2)
             self.set_state("look_left" if cx > 0 else "look", 1.6)
             self.kick(-1.0)
-            self.quip(C.COME_REFUSE_TEXTS, urgent=True)
+            self.quip(self._tune("come_refuse_lines", C.COME_REFUSE_TEXTS), urgent=True)
             self.emit_event("come_refused")
             return
         if self.edge:
@@ -2575,11 +2581,13 @@ class PetWindow(QWidget):
         if self.edge:
             self._reveal_until = time.monotonic() + 3.0
         lv = self.stats.level()[0]
+        long = pool is C.BACK_TEXTS
         if pool is C.RETURN_TEXTS:                        # 短暂离开: 好感够了换成更亲近的那组话
             for k, extra in C.RETURN_TEXTS_LV.items():
                 if lv >= k:
                     pool = extra
-        if lv >= RETURN_CHEER_LV:                        # 好友起: 跳起来欢迎, 冒爱心
+        pool = self._tune("greet_lines", pool, long=long, level=lv)
+        if lv >= RETURN_CHEER_LV and self._tune("greet_cheer", True, level=lv):   # 好友起: 跳起来欢迎, 冒爱心
             self.set_state("cheer", 2.2)
             self.burst("heart", 6)
             if not self.edge:
@@ -3671,6 +3679,8 @@ class PetWindow(QWidget):
         if kind == "lines":
             lines = [x for x in v if isinstance(x, str) and x.strip()] if isinstance(v, (list, tuple)) else []
             return lines or value
+        if kind == "text":
+            return v.strip()[:hi] if isinstance(v, str) and v.strip() else value
         return value
 
     def plugin_status(self):

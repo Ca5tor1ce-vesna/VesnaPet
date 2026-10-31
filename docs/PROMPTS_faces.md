@@ -2,7 +2,7 @@
 
 这是提示词，不是成品图，用 Grok 出图。
 - 这四张：`sulk`（赌气）、`held`（被拎起）、`yuck`（皱脸）、`wet`（湿漉漉）。成品放 `assets/<名字>.png`，放进去就生效，没有图时会回退到原来那张（见 `docs/接口规范.md` 第 2.6 节）。
-- `pout`、`hungry`、`smug`、`queasy` 四张是在原立绘上直接改脸做的，不用再出。
+- `pout`、`smug`、`queasy` 三张是在原立绘上直接改脸做的，不用再出。`hungry` 原来也是改脸做的，看着不像饿，已经用 Grok 重出（见文末）。
 - Grok 出来的原图直接拿去处理就行，不用自己抠图。之后要做的是：去掉灰背景、缩放到 512×512、底边对齐、和原立绘比对大小。
 
 ## 2026-10-31 第一轮出图结果
@@ -19,11 +19,11 @@
 ## Grok 的用法
 - 每张都用「上传参考图 + 改图指令」来出，只靠文字很难画得像本人。参考图用包里带的 `ref_*.png`：就是原立绘铺上灰底，免得透明背景被当成黑色。
 - Grok 没有单独的反向提示词框，所以「不要什么」已经写进了通用前缀。
-- 背景要求是纯灰色，因为白描边贴在白底上就抠不出来了。
+- 背景要求是纯灰色，因为白描边贴在白底上就抠不出来了。前缀里不要写颜色代码（比如 #808080），Grok 会把它当成文字画进图里。
 - 每张出 3–4 个版本，挑头冠、发型、泪痣都对的那一张。如果画风跑偏了，就在末尾加一句 `The art style must match the uploaded image exactly.` 再出。
 
 ## 通用前缀（每张都先贴这段，后面接正文）
-Edit the uploaded image. Keep the exact same chibi girl: same art style, line weight and colours, symmetrical twin drill-curl blonde hair with teal streaks, silver tiara with a teal forehead gem, two teal ribbon bows and white hairband, pointed elf ears, teal eyes, small tear mole under her left eye, white gloves, white ruffled capelet, gold epaulettes, small mint translucent fairy wings. Keep the same bust-shot framing cropped flat at the bottom edge and the thick white sticker outline around the whole figure. Plain flat solid medium grey background (#808080), no gradient, no shadow, nothing on the ground. No text, no watermark, no extra characters, no full body, no legs. Change only the following:
+Edit the uploaded image. Keep the exact same chibi girl: same art style, line weight and colours, symmetrical twin drill-curl blonde hair with teal streaks, silver tiara with a teal forehead gem, two teal ribbon bows and white hairband, pointed elf ears, teal eyes, small tear mole under her left eye, white gloves, white ruffled capelet, gold epaulettes, small mint translucent fairy wings. Keep the same bust-shot framing cropped flat at the bottom edge and the thick white sticker outline around the whole figure. Plain flat solid medium grey background, no gradient, no shadow, nothing on the ground. No text, no watermark, no extra characters, no full body, no legs. Change only the following:
 
 ## sulk.png 赌气（参考图 `ref_angry.png`）
 用在闹别扭期间。头部那句是「背对着你,假装在看风景……」。
@@ -48,3 +48,10 @@ she has just tasted something she really dislikes: face scrunched up, eyes squee
 she has just been soaked with water and is grumpy about it: blonde hair a shade darker and flattened, drill curls drooping and dripping, a few wet strands stuck to her cheeks, water droplets falling from her hair, tiara and ribbons, half-lidded glaring eyes, cheeks puffed in an angry pout, a small red anger mark. The water stays on her only: no puddle, no splash on the ground.
 
 备注：头冠和蝴蝶结即使湿了也必须看得清。头发会变暗，这时候它们就是认出她最关键的地方。
+
+## hungry.png 饿了（重出，参考图 `ref_idle.png`）
+用在饱腹低于 25、她站着发呆的时候，出现的时间比别的脸都长。第一版是在原图上改脸做的，眼睛借了"认真"那张，看起来不像饿，所以重出。
+
+she is hungry and out of energy: one gloved hand pressed against her tummy, the other hand loosely holding her wand lowered, shoulders slumped a little, droopy tired eyes looking up at the viewer with a pleading look, eyebrows sagging, small wavy open mouth, a tiny bit of drool at the corner of her mouth, one small sweat drop, and two or three little wavy growl lines coming from her tummy. Weak and pitiful but cute, not sick.
+
+备注：出了两轮，用的是第二轮的第 7 版（眼睛下垂没力气、含泪流口水、手捂肚子、有咕噜线），构图和 idle 一致，原样缩一半就对齐了。第一轮有一张把 `#808080` 当文字画了进去，所以前缀里已经删掉了颜色代码。
