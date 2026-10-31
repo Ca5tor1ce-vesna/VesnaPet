@@ -4,7 +4,9 @@ cd /d "%~dp0"
 
 set "PY="
 set "PYW="
-py -3 --version >nul 2>nul && set "PY=py -3" && set "PYW=pyw -3"
+rem Prefer 3.12: newer default (e.g. 3.15) may lack PySide6 wheels / SSL pip issues
+py -3.12 --version >nul 2>nul && set "PY=py -3.12" && set "PYW=pyw -3.12"
+if not defined PY py -3 --version >nul 2>nul && set "PY=py -3" && set "PYW=pyw -3"
 if not defined PY python --version >nul 2>nul && set "PY=python" && set "PYW=pythonw"
 if not defined PY goto nopython
 
