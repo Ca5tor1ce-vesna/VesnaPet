@@ -274,6 +274,8 @@ class Water:
             return None
         a = 60 + int(30 * abs(__import__("math").sin(t * 3)))
         a = a // 10 * 10
+        if key == "wet":
+            a //= 2                    # 湿漉漉那张本来就偏暗, 红光减半, 不然整个人发浑
         ck = (pm.cacheKey(), a)
         out = self._glow_cache.get(ck)
         if out is None:
