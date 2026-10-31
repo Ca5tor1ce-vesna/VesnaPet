@@ -979,9 +979,6 @@ class PetWindow(QWidget):
             return "正在安静地陪你专注……"
         if self.state == "sleep":
             return "睡得正香,呼……"
-        lines = self._ix.status_lines()
-        if lines:
-            return lines[0]
         if st.hunger < 25:
             return "肚子咕咕叫,想吃东西~"
         if self.butterfly.active():

@@ -388,10 +388,18 @@ class ActionMenu(CardWindow):
             p.setFont(font(16, QFont.Bold))
             p.drawText(QRectF(ox + 68, oy + 11, 80, 22), Qt.AlignLeft | Qt.AlignVCenter, "薇斯纳")
             paint_chip(p, ox + 128, oy + 13, f"Lv.{lv} {name}", MINT_D, QColor(255, 255, 255, 200))
-            # 好感 + 饱腹 迷你条
+            # 好感 + 饱腹 迷你条; 有插件状态条(如心情)时这一行往上挪, 下面再放一条
+            ext = pet._ix.status_bars()[:1]
+            by = 38 if ext else 40
             frac = 1.0 if hi is None else (st.affection - lo) / max(1, hi - lo)
-            self._mini_bar(p, QRectF(ox + 68, oy + 40, 104, 7), frac, (MINT, PINK), "💗")
-            self._mini_bar(p, QRectF(ox + 192, oy + 40, 58, 7), st.hunger / 100, (GOLD, ORANGE), "🍙")
+            self._mini_bar(p, QRectF(ox + 68, oy + by, 104, 7), frac, (MINT, PINK), "💗")
+            self._mini_bar(p, QRectF(ox + 192, oy + by, 58, 7), st.hunger / 100, (GOLD, ORANGE), "🍙")
+            for e in ext:
+                self._mini_bar(p, QRectF(ox + 68, oy + 53, 104, 7), e["frac"], tuple(QColor(c) for c in e["colors"]),
+                               e["emoji"])
+                p.setFont(font(10))
+                p.setPen(INK2)
+                p.drawText(QRectF(ox + 178, oy + 48, 80, 16), Qt.AlignVCenter | Qt.AlignLeft, e["text"])
             # 状态行
             y = oy + self.status_y
             r = QRectF(ox + 17, y, b.width() - 34, 28)
@@ -455,6 +463,7 @@ class ActionMenu(CardWindow):
                 parts.append(pet.link.status_text())
             except Exception:
                 pass
+        parts += pet._ix.status_lines()                  # 插件的状态(如: 正在等的小心愿)
         if not parts:
             if pet.stats.hunger < 30:
                 parts.append("肚子有点饿了……")
@@ -669,6 +678,10 @@ class HomePanel(CardWindow):
         self.aff_bar.setGeometry(0, 26, w, 10)
         self.hun_bar = Bar(pg, (GOLD, ORANGE), 10)
         self.hun_bar.setGeometry(0, 74, w, 10)
+        self.ext_bar = Bar(pg, (MINT, PINK), 10)        # 插件状态条(如心情), 有才显示
+        self.ext_bar.setGeometry(0, 122, w, 10)
+        self.ext_bar.hide()
+        self._ext, self._ext_dy = None, 0
         self.fortune_btn = Button("抽一签", pg, "gold", "🔮", h=30, px=12)
         self.fortune_btn.setFixedWidth(96)
         self.fortune_btn.move(w - 96 - 14, 112 + 25)
@@ -682,6 +695,13 @@ class HomePanel(CardWindow):
             self.stat_cards.append(c)
         self.status_pg = pg
         pg.paintEvent = lambda ev, pg=pg: self._paint_status(pg)
+
+    def _layout_status(self, dy):
+        """有插件状态条时, 运势卡和统计格整体往下挪 dy"""
+        w = self.area.width()
+        self.fortune_btn.move(w - 96 - 14, 112 + 25 + dy)
+        for i, c in enumerate(self.stat_cards):
+            c.move((i % 3) * (108 + 9), 212 + dy + (i // 3) * 72)
 
     def _paint_status(self, pg):
         p = QPainter(pg)
@@ -704,8 +724,17 @@ class HomePanel(CardWindow):
         hv = st.hunger
         mood = "饱饱的~" if hv > 80 else ("刚刚好" if hv > 45 else ("有点饿" if hv > 20 else "好饿……"))
         p.drawText(QRectF(0, 48, w, 22), Qt.AlignVCenter | Qt.AlignRight, f"{int(hv)}% · {mood}")
+        dy = self._ext_dy
+        if self._ext:                                     # 插件状态条(如心情), 和饱腹一样的样式
+            e = self._ext
+            p.setFont(font(13, QFont.DemiBold))
+            p.setPen(INK)
+            p.drawText(QRectF(0, 96, 200, 22), Qt.AlignVCenter | Qt.AlignLeft, f"{e['emoji']} {e['title']}")
+            p.setFont(font(12))
+            p.setPen(INK2)
+            p.drawText(QRectF(0, 96, w, 22), Qt.AlignVCenter | Qt.AlignRight, e["text"])
         # 今日运势卡
-        r = QRectF(0, 104, w, 92)
+        r = QRectF(0, 104 + dy, w, 92)
         p.setPen(Qt.NoPen)
         g = QLinearGradient(r.topLeft(), r.topRight())
         g.setColorAt(0, QColor("#FFF7E2"))
@@ -716,25 +745,25 @@ class HomePanel(CardWindow):
         if f:
             p.setFont(font(12))
             p.setPen(INK2)
-            p.drawText(QRectF(16, 112, 200, 20), Qt.AlignVCenter | Qt.AlignLeft, "🔮 今日运势")
+            p.drawText(QRectF(16, 112 + dy, 200, 20), Qt.AlignVCenter | Qt.AlignLeft, "🔮 今日运势")
             p.setFont(font(26, QFont.Black))
             p.setPen(QColor(f["tier_color"]))
-            p.drawText(QRectF(16, 132, 120, 38), Qt.AlignVCenter | Qt.AlignLeft, f["tier"])
+            p.drawText(QRectF(16, 132 + dy, 120, 38), Qt.AlignVCenter | Qt.AlignLeft, f["tier"])
             p.setFont(font(11))
             p.setPen(MINT_D)
-            p.drawText(QRectF(16 + 92, 136, 180, 16), Qt.AlignVCenter | Qt.AlignLeft, "宜 " + " · ".join(f["good"]))
+            p.drawText(QRectF(16 + 92, 136 + dy, 180, 16), Qt.AlignVCenter | Qt.AlignLeft, "宜 " + " · ".join(f["good"]))
             p.setPen(PINK_D)
-            p.drawText(QRectF(16 + 92, 154, 180, 16), Qt.AlignVCenter | Qt.AlignLeft, "忌 " + " · ".join(f["bad"]))
+            p.drawText(QRectF(16 + 92, 154 + dy, 180, 16), Qt.AlignVCenter | Qt.AlignLeft, "忌 " + " · ".join(f["bad"]))
             p.setPen(INK2)
-            p.drawText(QRectF(16, 172, w - 32, 18), Qt.AlignVCenter | Qt.AlignLeft,
+            p.drawText(QRectF(16, 172 + dy, w - 32, 18), Qt.AlignVCenter | Qt.AlignLeft,
                        f"幸运色 {f['lucky_color'][0]} · 幸运物 {f['lucky_item']}")
         else:
             p.setFont(font(14, QFont.Bold))
             p.setPen(INK)
-            p.drawText(QRectF(16, 118, 220, 24), Qt.AlignVCenter | Qt.AlignLeft, "🔮 今天的运势还没抽~")
+            p.drawText(QRectF(16, 118 + dy, 220, 24), Qt.AlignVCenter | Qt.AlignLeft, "🔮 今天的运势还没抽~")
             p.setFont(font(12))
             p.setPen(INK2)
-            p.drawText(QRectF(16, 146, 220, 40), Qt.AlignLeft | Qt.TextWordWrap, "让薇斯纳用蝴蝶法杖帮你占卜一下吧!")
+            p.drawText(QRectF(16, 146 + dy, 220, 40), Qt.AlignLeft | Qt.TextWordWrap, "让薇斯纳用蝴蝶法杖帮你占卜一下吧!")
         p.end()
 
     # ----- 专注页 -----
@@ -945,6 +974,16 @@ class HomePanel(CardWindow):
         lv, name, lo, hi = st.level()
         self.aff_bar.set_value(1.0 if hi is None else (st.affection - lo) / max(1, hi - lo))
         self.hun_bar.set_value(st.hunger / 100)
+        bars = self.pet._ix.status_bars()[:1]           # 插件状态条(如心情); 这里只放得下一条
+        self._ext = bars[0] if bars else None
+        dy = 48 if self._ext else 0
+        if dy != self._ext_dy:
+            self._ext_dy = dy
+            self._layout_status(dy)
+        if self._ext:
+            self.ext_bar.colors = tuple(QColor(c) for c in self._ext["colors"])
+            self.ext_bar.set_value(self._ext["frac"])
+        self.ext_bar.setVisible(self._ext is not None)
         vals = [st.d["days_met"], st.d["pets"], st.d["feeds"], st.d["butterflies"], st.d["focus_minutes"], st.d["rps_win"]]
         for c, v in zip(self.stat_cards, vals):
             c.value = str(v)

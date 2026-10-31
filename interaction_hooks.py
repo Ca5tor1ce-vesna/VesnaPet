@@ -17,7 +17,9 @@
   on_mouse_press(event) -> bool 鼠标按下(任意键)先问插件; True = 插件吃掉这次按下
   on_wheel(event) -> bool        滚轮转圈前先问插件; True = 插件吃掉(不转、不攒晕度)
   on_context_menu(event) -> bool 右键菜单弹出前先问插件; True = 不弹
-  status_text() -> str | None   插件想显示的一行状态(托盘提示里列出, 小屋心情行显示第一条), 如「小心愿: 想吃甜的」
+  status_text() -> str | None   插件想显示的一行状态(托盘提示、右键卡片的状态行), 如「小心愿: 想吃甜的」
+  status_bars() -> [dict]       像饱腹那样的进度条: {key, emoji, title, frac(0-1), text, colors(两个 #色值)};
+                                小屋状态页和右键卡片目前只放得下一条(按插件加载顺序取第一条)
   menu_items() -> [(emoji, label, fn)]  往右键菜单(和托盘「互动」子菜单)注册菜单项
   settings_rows() -> [dict]     往设置面板「扩展」区注册行: {key, emoji, title, desc, control(QWidget), sync(可选)}
 """
@@ -95,6 +97,26 @@ class Hub:
                         out.append(str(txt))
                 except Exception as e:
                     self._err("status_text", e, pl)
+        return out
+
+    def status_bars(self):
+        """插件的状态条(像饱腹那样); 字段不全的补默认, 出错的插件停用"""
+        out = []
+        for pl in list(self.plugins):
+            f = getattr(pl, "status_bars", None)
+            if f is None:
+                continue
+            try:
+                for b in (f() or []):
+                    if not isinstance(b, dict) or "frac" not in b:
+                        continue
+                    colors = [str(c) for c in (b.get("colors") or ())][:2]
+                    out.append(dict(key=str(b.get("key", "")), emoji=str(b.get("emoji", "")),
+                                    title=str(b.get("title", "")), text=str(b.get("text", "")),
+                                    frac=max(0.0, min(1.0, float(b["frac"]))),
+                                    colors=tuple(colors) if len(colors) == 2 else ("#4FC7B5", "#FF8FB1")))
+            except Exception as e:
+                self._err("status_bars", e, pl)
         return out
 
     def step(self, t):
