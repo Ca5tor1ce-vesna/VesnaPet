@@ -48,7 +48,10 @@ PEEK_EXTRA = {"peek_happy": "peek_awake", "peek_surprised": "peek_awake"}
 FACES = {"pout": "shy", "smug": "content", "hungry": "idle", "queasy": "dizzy",
          "sulk": "angry", "held": "surprised", "yuck": "angry", "wet": "angry",
          "cold": "pout",              # cold 只给插件用(expr), 没图时借委屈那张
-         "frozen": "wet"}            # frozen 暴雪浇水冻住; 没图时借湿漉漉(再借 angry)
+         "frozen": "wet",            # frozen 暴雪浇水冻住; 没图时借湿漉漉(再借 angry)
+         "spicy": "yuck",            # 辣到喷火; 没图时借皱脸
+         "fire": "spicy"}            # 整个人燃起来(刚吃完辣的又来一口; 插件: 火炉烫到等); 没图时借喷火那张
+SPICY_AGAIN = 90.0              # 吃完辣的这么多秒内又吃辣的 -> 不是喷火, 是整个人燃起来
 HUNGRY_FACE = 25                # 饱腹低于这个, 站着发呆时换成「饿了」那张
 FEED_REACTIONS = ("fav", "like", "ok", "dislike", "weird")     # 插件接管吃的反应时, feed 事件里能记成的档
 
@@ -270,6 +273,10 @@ def _resolve_fallbacks(frames, table):
                 frames[s] = frames[fb]
 
 
+SPRITE_BOX = None               # 所有立绘共用的裁剪框(load_frames 算出来); 插件自带的整张立绘用 pet.fit_sprite() 按它裁
+SPRITE_SIZE = None
+
+
 def load_frames():
     """返回 (frames, real): real = 真正有图(非回退)的状态集合"""
     imgs = {}
@@ -289,6 +296,8 @@ def load_frames():
     for img in imgs.values():
         r = alpha_bbox(img)
         box = r if box is None else box.united(r)
+    global SPRITE_BOX, SPRITE_SIZE
+    SPRITE_BOX, SPRITE_SIZE = QRect(box), imgs["idle"].size()
     frames = {s: QPixmap.fromImage(img.copy(box)) for s, img in imgs.items()}
     real = set(frames)
     _resolve_fallbacks(frames, {**EXTRA_STATES, **FACES})
@@ -618,6 +627,7 @@ class PetWindow(QWidget):
         # 被丢 / 闹别扭 / 转圈
         self._throws = deque(maxlen=12)
         self._feeds = deque(maxlen=16); self._dislikes = deque(maxlen=8); self._extra_stomach_until = 0.0
+        self._spicy_at = -1e9          # 上次吃辣的(monotonic): SPICY_AGAIN 秒内再吃 -> 燃起来
         self._throw = None              # 正在飞的这一丢: dict(speed, hard, level, bonks, t_bonk)
         self._sulk_until = 0.0; self._sulk_calm = 0; self._sulk_click_t = 0.0; self._sulk_fx = 0.0; self._sulk_poke_say = 0.0
         self._spin_meter = 0.0; self._spin_stage = 0; self._spin_t = now
@@ -740,6 +750,13 @@ class PetWindow(QWidget):
     def codex(self):
         """图鉴里列哪几格: 原来的都列; 只换脸的表情(FACES)要 assets 里真有图才列"""
         return [e for e in C.CODEX if e[0] not in FACES or e[0] in self.real_frames]
+
+    def fit_sprite(self, pm):
+        """插件自带的整张立绘(和 assets 里的一样大、同一套构图, 如 512×512) -> 按所有立绘共用的裁剪框裁好。
+        裁好再缩放到当前立绘的大小才不会被压扁; 尺寸不一样的图原样返回"""
+        if SPRITE_BOX is None or pm is None or pm.isNull() or pm.size() != SPRITE_SIZE:
+            return pm
+        return pm.copy(SPRITE_BOX)
 
     # ----- 菜单 / 面板 -----
     def _build_tray_menu(self):
@@ -1332,14 +1349,16 @@ class PetWindow(QWidget):
             self.burst("note", 1)
             self.say(self.pick_line(f["lines"] if random.random() < 0.75 else C.FOOD_OK_TEXTS), force=True)
             self.gain(2, "feed", quiet=True)
-        elif trait == "spicy":                              # 辣!
-            self.set_state("angry", 2.8, expr="yuck")
-            self.burst("steam", 9, at=hp + QPointF(0, -10), bias=(0, 0))
-            self.burst("emoji", 3, at=m, text="🔥")
+        elif trait == "spicy":                              # 辣! 刚吃过辣的又来一口 -> 整个人燃起来
+            again = now - self._spicy_at < SPICY_AGAIN
+            self._spicy_at = now
+            self.set_state("angry", 2.8, expr="fire" if again else "spicy")
+            self.burst("steam", 12 if again else 9, at=hp + QPointF(0, -10), bias=(0, 0))
+            self.burst("emoji", 5 if again else 3, at=m, text="🔥")
             self.burst("sweat", 4)
             self.sfx.play("huh")
-            self.say(self.pick_line(f["lines"]), force=True, tone="alert")
-            QTimer.singleShot(1900, lambda: (self.burst("drop", 3), self.burst("emoji", 1, text="💧"),
+            self.say(self.pick_line(C.FOOD_SPICY_AGAIN_TEXTS if again else f["lines"]), force=True, tone="alert")
+            QTimer.singleShot(1900, lambda: (self._spicy_cooled(), self.burst("drop", 3), self.burst("emoji", 1, text="💧"),
                                              self.say(self.pick_line(C.FOOD_SPICY_WATER_TEXTS), force=True,
                                                       tone="alert")))
             QTimer.singleShot(4400, lambda: self._food_say(C.FOOD_SPICY_AFTER_TEXTS))
@@ -1384,6 +1403,12 @@ class PetWindow(QWidget):
         if hearts:
             self.burst("heart", hearts)
         self.say(self.pick_line(pool), force=True, duration=3.4, tone=tone)
+
+    def _spicy_cooled(self):
+        """吃辣 1.9 秒后灌了口水: 火下去了, 喷火 / 燃起来的脸换回皱脸(这段反应已经被别的打断就不管)"""
+        if self.state == "angry" and self._expr_state == "angry" and self._expr in ("spicy", "fire"):
+            self._expr = "yuck"
+            self.update()
 
     def _note_dislike(self, now, quiet_until=3.0):
         """短时间内连喂讨厌的: 第 2 次扣一点好感并警告, 第 3 次闹别扭"""

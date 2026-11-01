@@ -67,3 +67,20 @@ she is freezing in a blizzard: shoulders hunched up, both gloved hands held toge
 she has just been soaked with water in a blizzard and frozen solid: a clear crystalline ice shell and frost coating her hair, face, capelet, gloves and wand, with a few sharp ice facets and tiny icicles hanging from her drill curls, tiara and ribbons; blonde hair a shade darker as if wet under the ice, water droplets turned into frozen beads; eyes wide open and a little teary, eyebrows raised then drooping, mouth a small aggrieved open "eh?!" pout, cheeks flushed pink from the cold; body stiff and slightly hunched as if mid-shiver locked in place, a few short freeze-crack motion lines and tiny ice crystal sparkles close around her (stay inside the sticker bounds). No scarf. Still a bust shot cropped flat at the bottom. Cute and pitiful, not scary, not covered so thick that the tiara, teal bows, tear mole or mint wings disappear.
 
 备注：头冠、青蝴蝶结、泪痣、薄荷翅在冰壳里也必须看得清。冰是透明/半透明晶体，不要整块不透明白冰把脸糊死。地上不要积水、不要雪堆、不要全画面暴风雪背景。建议出 3–4 版，挑冰壳薄、五官还能认、构图和 idle/wet 同框的那张；Grok 改图时原样缩一半对齐。
+
+## spicy.png 喷火（参考图 `ref_angry.png`）
+用在吃辣的时候（状态是 angry），1.9 秒后灌了口水就换回皱脸。暴雪天吃辣的（天气 DLC）也用这张。
+
+she has just eaten something extremely spicy and her mouth is on fire: whole face flushed bright red right up to the tips of her elf ears, eyes squeezed shut into > < shapes with big comic tears at the corners, mouth wide open with her tongue out and a small cartoon flame puffing out of it, both gloved hands flapping in front of her mouth to fan it, two or three sweat drops on her forehead, drill curls bouncing up slightly. Funny and cute, not hurt. Keep the flame small and close to her mouth; no steam clouds above her head and no fire anywhere else.
+
+备注：头顶不要画蒸汽，程序会自己喷蒸汽、🔥 和汗珠粒子，画在头顶会把共用裁剪框撑大。出了四版（13–16），用的是第 13 版：
+脸红但没红过头，额前宝石还是青色。第 15、16 版整张脸红透了，第 15 版连宝石都变红了。Grok 保留了 2 倍构图，原样缩一半就对齐了。
+
+## fire.png 燃起来（参考图 `ref_surprised.png`）
+用在刚吃完辣的又吃辣的（本体），以及插件：火炉烫到、冻成冰块时吃辣的（天气 DLC）。
+
+she has burst into comic cartoon flames: a ring of bright orange and yellow cartoon fire blazing up all around her body behind her, cheeks flushed red, teary sparkling teal eyes, mouth wide open in a flustered wail, one small sweat drop, gloved hands clutching her wand. Funny and cute, not hurt, she is not burnt. The flames stay close around her and must not rise higher than the top of her ribbon bows.
+
+备注：现在这张是用户自己出的，火焰撑满了整张图（顶到 y≈12）。处理办法：按头冠、眼睛和原立绘对齐，缩到 0.44 倍（Grok 这次把人画大了，
+没保留 2 倍构图）；人物上沿（每列最上面的深色描边或银色头冠）以下全留，上沿以上的火焰从 y=215 往上渐隐，到 y=131 清空。
+以后重出的话，提示词里最后那句「火不要高过蝴蝶结」最要紧。

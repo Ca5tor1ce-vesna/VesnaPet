@@ -472,7 +472,8 @@ def _step_shock(self, t, dt):
 
 class _ShockFlash:
     """shock 期间临时挂到 pet._ix 的画图钩子: 专用立绘(有图时) + 白/黄闪烁 + 水平抖。
-    立绘: <桌宠目录>/dlc/interactions/shocked.png, 备用 dlc/foods/sprites/shocked.png (512x512, 与其他立绘对齐); 每次触发重新检查, 缺图用当前脸。"""
+    立绘: <桌宠目录>/dlc/interactions/shocked.png, 备用 dlc/foods/sprites/shocked.png (512x512, 与其他立绘对齐, 内容别超出共用裁剪框);
+    每次触发重新检查, 缺图用当前脸。"""
     def __init__(self, fx):
         self.fx = fx
         self._cache = {}
@@ -484,7 +485,7 @@ class _ShockFlash:
                 if f.is_file():
                     pm = QPixmap(str(f))
                     if not pm.isNull():
-                        self._img = pm
+                        self._img = fx.pet.fit_sprite(pm)     # 先按立绘共用的框裁, 不然缩放时会被压扁
                         break
         except Exception:
             self._img = None

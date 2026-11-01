@@ -42,7 +42,8 @@ class VomitFx:
         for n in ("vomit_pre", "vomit"):
             f = HERE / (n + ".png")
             pm = QPixmap(str(f)) if f.is_file() else QPixmap()
-            self._img[n] = None if pm.isNull() else pm
+            fit = getattr(self.pet, "fit_sprite", None)               # 先按立绘共用的框裁(旧本体没有就照旧), 不然缩放时会被压扁
+            self._img[n] = None if pm.isNull() else (fit(pm) if fit else pm)
 
     def _sized(self, name, ref):
         src = self._img.get(name)

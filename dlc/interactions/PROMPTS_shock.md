@@ -1,20 +1,26 @@
-# 被电击口香糖电到 立绘提示词（2026-10-14）
+# 被电击口香糖电到 立绘提示词（2026-11-02 重画）
 
-这是提示词，不是成品图，用用户自己的图像工具出图。
-- 原图放 `dlc/interactions/raw/shocked_raw.png`，成品是 `dlc/interactions/shocked.png`。和 vomit 那两张放在一起，因为都是角色的互动立绘，不是食物图标。
-- 规格和 vomit 一样：512×512 RGBA 透明背景，半身像，底边 y≈498，高度约 363px（70%），白色贴纸粗描边 7–9px。
-- 出图用图生图：上传 `assets/dizzy.png` 当参考图（能同时传角色参考的话加上 `assets/idle.png`），重绘强度 0.5–0.65。这张姿势和发型变化比较大，所以强度比 vomit 那两张略高一点。
+这是提示词，不是成品图，用 Grok 出图。
+- 成品是 `dlc/interactions/shocked.png`（和 vomit 那两张放在一起，都是角色的互动立绘，不是食物图标）。电到期间 `food_fx` 用它，外加白 / 黄闪烁和左右抖。
+- 规格和 `assets` 里的立绘一样：512×512 RGBA 透明背景，半身像，底边 y≈497，内容不能超出共用裁剪框 (14,130)–(498,498)。
+  程序会先按这个框裁（`pet.fit_sprite`），再缩放到当前立绘大小；框外的部分直接看不见。
+- 用法和 `docs/PROMPTS_faces.md` 一样：上传参考图 `ref_surprised.png`，先贴那边的「通用前缀」，再接下面的正文。
 
-## 通用前缀
-chibi sticker illustration of the same girl as the reference image, bust shot cropped at the chest, blonde hair with teal streaks, silver tiara with teal forehead gem, two teal ribbon bows and white hairband, pointed elf ears, small tear mole under left eye, white ruffled capelet, gold epaulettes, small mint translucent fairy wings, thick white sticker outline around the whole figure, clean anime cel shading, soft pastel colours, transparent background, nothing on the ground, no text, no watermark
+## 第一版为什么重画（2026-10-14 那张）
+- 头发炸成一大团爆炸头，盖住了蝴蝶结和两边的螺旋卷，人也被挤小了一圈，认不太出是她。
+- X 光骨架占了整个身子，眼睛只剩白眼。闪烁和抖动程序本来就有，图里不用再画。
+- 另外以前程序把整张 512×512 拉伸到裁好的立绘尺寸（484×368），竖着被压到七成，看起来是扁的。已经改成先裁再缩放。
 
-## shocked.png 正文
-comedic cartoon electric shock reaction, her twin drill-curl blonde hair frizzed out and standing straight up and puffed out like a cartoon static explosion, a few slightly singed darker tips with small puffs of grey smoke, eyes wide round and blank white, tiny pupils, mouth open in a stiff zigzag shape, body rigid and stiff, a faint cute cartoon x-ray skeleton outline flashing through her silhouette, small blue and yellow electric sparks and zigzag lightning crackling close around her, funny and cute not scary
+## 正文
+she has just been zapped by an electric shock and is frozen stiff mid-zap: her twin drill curls and bangs frizzed and puffed out with static, a few strands sticking straight out sideways, but the drill-curl shape is still clearly recognisable and no hair rises higher than the top of her ribbon bows; a few hair tips slightly singed darker with two or three tiny puffs of grey smoke; teal eyes wide open with tiny shrunken pupils and a small tear at each corner; teeth clenched in a stiff wavy zigzag grimace; shoulders hunched up and both arms locked rigid, gloved fingers splayed stiff; her tiara knocked slightly crooked with a tiny spark jumping off the forehead gem; small bright blue and yellow zigzag sparks crackling close around her outline. Funny and cute, not hurt. No skeleton, no x-ray, no glowing aura, no blank white eyes.
 
-## 反向提示词
-scary, horror, realistic skeleton, skull close-up, burns, injury, blood, gore, dark creepy, photorealistic, extra characters, full body, legs, text, watermark, background scenery, ground, floor
-
-## 备注
-- 骨骼透视只要一层淡淡的卡通线条，如果出图太像真骨头，就把 "x-ray skeleton" 那一句删掉重出。
-- 头冠和蝴蝶结在炸开的头发里也要保留，这是认出她最关键的地方。
-- 建议出 3–4 张，挑头冠最完整的那一张。
+## 出图结果（2026-11-02）
+- 出了四版（17–20），用的是第 17 版。
+- 「头冠歪了」这句 Grok 会画成两个头冠：一个戴着，另一个飞出去（17、19）或者叠在一起（20）。以后重出时把这句换成
+  `her tiara still sitting on her head, a tiny spark jumping off the forehead gem`。
+- 第 18 版有四只手（两只握着法杖，下面还张着两只），第 20 版也多了手。可以在末尾加一句 `exactly two arms and two hands, not holding the wand`。
+- 第 17 版 Grok 保留了 2 倍构图，原样缩一半，再左移 4px（右边那撮焦毛超出了 498）。接着做了三件事：
+  - 灰烟是独立的小块，删掉。
+  - 头顶上沿（y≈143，蝴蝶结的白描边）以上全删，飞走的那个头冠和两边的火花都在上面。头冠右腿挨着蝴蝶结，那一段删到 y=148。
+  - 头冠尖上的火花留着，在 130–150 之间渐隐。
+- 抠图用的是灰底漫水，螺旋卷圈里那几块灰底没有白描边围着，单独按「颜色是平的灰」挖掉。
