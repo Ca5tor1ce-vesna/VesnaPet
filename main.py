@@ -50,6 +50,7 @@ FACES = {"pout": "shy", "smug": "content", "hungry": "idle", "queasy": "dizzy",
          "cold": "pout",              # cold 只给插件用(expr), 没图时借委屈那张
          "frozen": "wet"}            # frozen 暴雪浇水冻住; 没图时借湿漉漉(再借 angry)
 HUNGRY_FACE = 25                # 饱腹低于这个, 站着发呆时换成「饿了」那张
+FEED_REACTIONS = ("fav", "like", "ok", "dislike", "weird")     # 插件接管吃的反应时, feed 事件里能记成的档
 
 # ---------------- 可调参数 ----------------
 SIZES = {"small": 140, "medium": 200, "large": 300}
@@ -175,6 +176,9 @@ TUNABLE = {
     "bubble_pool": ("lines", None, None),       # 随机冒泡的台词池
     "sleep_after": ("float", 15.0, 3600.0),     # 多久没人理就睡着(秒); ctx: edge
     "food_refuse_p": ("float", 0.0, 1.0),       # 不爱吃 / 奇怪的东西直接推开的概率; ctx: key tier trait
+    "food_refuse": ("bool", None, None),        # 最后问一句: 这次推不推开(喜欢的也管; 整蛊食物不问); ctx: key tier trait
+    "food_refuse_lines": ("lines", None, None), # 推开时说的那句; ctx: key tier trait
+    "happy_lines": ("lines", None, None),       # 空闲小动作「开心」时说的那句(原版有一句「今天天气真好~」)
     "come_ok": ("bool", None, None),            # 叫她「过来~」肯不肯来
     "come_refuse_lines": ("lines", None, None), # 不肯过来时说的那句
     "greet_lines": ("lines", None, None),       # 你离开一阵回来, 她迎接你说的那句; ctx: long(离开很久), level
@@ -1234,6 +1238,7 @@ class PetWindow(QWidget):
             refuse = bad and random.random() < self._tune("food_refuse_p",
                                                           FOOD_REFUSE_WEIRD if tier == "weird" else FOOD_REFUSE_P,
                                                           key=key, tier=tier, trait=f["trait"])
+            refuse = self._tune("food_refuse", refuse, key=key, tier=tier, trait=f["trait"])
         if f.get("curious") and not self.stats.food_known(key) and not refuse:
             self.set_state("surprised", 1.8)    # 食物包的外界食物: 第一次见先好奇
             self.burst("quest", 1, at=self.head_point() + QPointF(self.char_w * 0.25, -8))
@@ -1257,8 +1262,11 @@ class PetWindow(QWidget):
         m = self.mouth_point()
         hp = self.head_point()
         first = self.stats.taste(key, eaten=not refuse)
-        self.emit_event("feed", key=key, name=f["name"], tier=tier, trait=trait,
-                        reaction="refuse" if refuse else tier, first=bool(first))
+        special = None                                      # 插件接管吃下去的反应(如暴雪天吃辣的): 返回事件里记成什么
+        if not refuse and not f.get("effect") and self._ix.plugins:
+            special = self._ix.eat(dict(f), bool(first))
+        reaction = "refuse" if refuse else (special if special in FEED_REACTIONS else tier)
+        self.emit_event("feed", key=key, name=f["name"], tier=tier, trait=trait, reaction=reaction, first=bool(first))
         if refuse:                                          # 推开不吃
             if tier == "dislike":
                 self.set_state("angry", 2.0, expr="yuck")
@@ -1271,7 +1279,8 @@ class PetWindow(QWidget):
             if tier == "weird":
                 self.burst("quest", 1, at=hp + QPointF(self.char_w * 0.25, -8))
             self.sfx.play("hmph")
-            self.say(self.pick_line(f["refuse"] or C.FOOD_REFUSE_TEXTS), force=True, duration=3.2, tone="alert")
+            pool = self._tune("food_refuse_lines", f["refuse"] or C.FOOD_REFUSE_TEXTS, key=key, tier=tier, trait=trait)
+            self.say(self.pick_line(pool), force=True, duration=3.2, tone="alert")
             self._note_dislike(now)
             return
         self.stats.feed(f["fill"])
@@ -1279,6 +1288,8 @@ class PetWindow(QWidget):
         self.sfx.play("munch")
         self.burst("crumb", 7, at=m, bias=(0, 0))
         self.kick(-1.6)
+        if special:
+            return
         if f.get("effect"):                                 # 食物包: 吃后效果(白名单)
             self._prank_last[key] = now
             if f.get("affection"):
@@ -2466,7 +2477,7 @@ class PetWindow(QWidget):
                     elif act == "happy":
                         self.set_state("happy", random.uniform(*HAPPY_DURATION))
                         if random.random() < 0.35:
-                            self.say(random.choice(C.HAPPY_TEXTS))
+                            self.say(random.choice(self._tune("happy_lines", C.HAPPY_TEXTS)))
                     elif act == "look":
                         first = random.choice(("look", "look_left"))
                         other = "look_left" if first == "look" else "look"
@@ -3791,6 +3802,8 @@ class PetWindow(QWidget):
                 grok = str(self.link.status_text() or "")
         except Exception:
             pass
+        key = None if self.edge else self.stand_key()
+        face = next((n for k, n, _ in C.CODEX if k == key), "") if key in FACES else ""
         return {
             "v": 1,
             "ok": True,
@@ -3824,6 +3837,9 @@ class PetWindow(QWidget):
             "spin_refuse": now < self._spin_refuse_until,
             "link_busy": bool(self.link_busy),
             "grok": grok,
+            "status": self.mood_text(),                  # 小屋头部那句话(她此刻的样子)
+            "extra": self.plugin_status(),               # 插件的状态行(天气、小心愿……)
+            "face": face,                                # 只换脸的表情的中文名(冻住 / 好冷 / 湿漉漉……), 没有就空
         }
 
     # ----- DLC 事件推送 / say (live 协议 v2) -----

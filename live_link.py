@@ -17,7 +17,7 @@
 
 桌宠 -> 客户端:
   ping: {"v":1,"ok":true,"pong":true,"proto":2,"caps":["get","subscribe","say"]}
-  get:  {"v":1,"ok":true, ...快照字段}            (v1 字段都在; 后来只加不改, 如 mood / mood_band)
+  get:  {"v":1,"ok":true, ...快照字段}            (v1 字段都在; 后来只加不改, 如 mood / mood_band / status / extra / face)
   subscribe: {"v":2,"ok":true,"subscribed":true}
   say:  {"v":2,"ok":true}  或  {"v":2,"ok":false,"err":"rate"|"busy"|"muted"|"hidden"|"empty"}
   未知: {"v":1,"ok":false,"err":"unknown"}
@@ -54,6 +54,7 @@ say 规则:
      / rage_poke(pokes, double, undo, blew) / memory(kind: recap|life, text) / approach(why: hungry|company)
      / weak_hop(hunger)
   插件发的(tender): carried(sec) / pet_lean / combed(messy, sulk) / tucked / woke_tucked / waved_back / goodnight / praised(n)
+  插件推的事件可以带 memo(一句话, 如「你给她围上了围巾」): 聊天 DLC 认不得的事件就用它写场景备忘。
   同一套事件也会通知互动插件(on_event); 完整说明和字段见 docs/接口规范.md。
 
 同时最多 4 个连接; 单行最多 4KB; 写缓冲超过 64KB 则断开(推送也一样, 慢客户端会被断开)。

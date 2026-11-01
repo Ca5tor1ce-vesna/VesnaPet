@@ -100,7 +100,11 @@ FOOD_FX_LINE = {
 
 
 def event_line(ev):
-    """把一条推送事件翻译成场景备忘行; 不需要记的返回 None。"""
+    """把一条推送事件翻译成场景备忘行; 不需要记的返回 None。
+    事件自己带了 memo(插件写好的一句话, 比如天气 / 火炉这类聊天这边不认识的事件)就直接用。"""
+    memo = ev.get("memo")
+    if isinstance(memo, str) and memo.strip():
+        return memo.strip()[:80]
     name = ev.get("ev")
     if name == "click":
         return "你点了她一下（互动）"
@@ -468,6 +472,9 @@ class PetWatch(QObject):
             "level": s.get("level"),
             "mood": MOOD_NAME.get(s.get("mood_band"), ""),
             "grok": s.get("grok") or "",
+            "status": s.get("status") or "",
+            "extra": "；".join(str(x) for x in (s.get("extra") or []) if x),
+            "face": s.get("face") or "",
             "focusing": bool(s.get("focusing")),
             "sleeping": bool(s.get("sleeping")),
             "dragging": bool(s.get("dragging")),

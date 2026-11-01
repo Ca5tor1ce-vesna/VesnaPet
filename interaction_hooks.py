@@ -13,6 +13,9 @@
   on_pet() -> bool              摸头时先问插件; True = 插件接管(原版摸头效果不执行)
   on_click(double) -> bool      单击/双击时先问插件(double=True 是双击); True = 插件接管(原版的戳/跳不执行)
   on_spin_queasy(now) -> bool   转圈转到顶、即将生气时调用; 返回 True 表示插件接管(原版的生气逻辑不执行)
+  on_eat(food, first) -> str | None  她吃下去(没推开、不是整蛊食物)时先问插件; 返回 fav / like / ok / dislike / weird
+                                = 插件接管这次的反应(表情、台词、好感都自己做), feed 事件按返回的档记(心情也按它算);
+                                None = 原版照常。饱腹、图鉴本体照常记
   step(t)                       每帧调用
   expr(key, state) -> str | None 每帧画立绘前问: 要不要换一张脸(main.FACES 里的名字, 如超级生气时换 "wet")。
                                 key 是本体选好的图, state 是状态; None = 不换。多个插件按 priority 依次传下去。
@@ -117,6 +120,20 @@ class Hub:
             except Exception as e:
                 self._err("expr", e, pl)
         return key
+
+    def eat(self, food, first):
+        """吃下去时问插件要不要接管反应: priority 大的先, 第一个返回非空的算数; 都不接管返回 None"""
+        for pl in sorted(self.plugins, key=lambda x: -getattr(x, "priority", 0)):
+            f = getattr(pl, "on_eat", None)
+            if f is None:
+                continue
+            try:
+                r = f(dict(food), first)
+                if r:
+                    return str(r)
+            except Exception as e:
+                self._err("eat", e, pl)
+        return None
 
     def state_texts(self):
         """插件管的短暂状态的一句话(超级生气、转吐……); 都没有就是空列表"""
