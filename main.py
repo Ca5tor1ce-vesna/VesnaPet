@@ -50,8 +50,16 @@ FACES = {"pout": "shy", "smug": "content", "hungry": "idle", "queasy": "dizzy",
          "cold": "pout",              # cold 只给插件用(expr), 没图时借委屈那张
          "frozen": "wet",            # frozen 暴雪浇水冻住; 没图时借湿漉漉(再借 angry)
          "spicy": "yuck",            # 辣到喷火; 没图时借皱脸
-         "fire": "spicy"}            # 整个人燃起来(刚吃完辣的又来一口; 插件: 火炉烫到等); 没图时借喷火那张
+         "fire": "spicy",            # 整个人燃起来(刚吃完辣的又来一口; 插件: 火炉烫到等); 没图时借喷火那张
+         "ko": "dizzy"}              # 魂飞了(X 眼): soul_out() 期间; 没图时借转晕那张
 SPICY_AGAIN = 90.0              # 吃完辣的这么多秒内又吃辣的 -> 不是喷火, 是整个人燃起来
+DARK_AGAIN = 120.0              # 吃完黑暗料理这么多秒内又吃 -> 魂飞出来
+# 魂飞出来(soul_out): 魂(assets/soul.png)从嘴里飘出来, 在头的斜上方晃, 到时间再被吸回去; 戳她 / 拖她会马上回来
+SOUL_SEC = 3.5                  # 魂在外面待多久(不算飘出去和吸回来)
+SOUL_OUT_SEC = 1.0              # 从嘴里飘到头顶要多久
+SOUL_BACK_SEC = (0.35, 0.2)     # 吸回来要多久: (到时间了, 被戳 / 被打断)
+SOUL_W = 0.36                   # 魂的宽 = 立绘宽的多少
+SOUL_ALPHA = 0.85
 HUNGRY_FACE = 25                # 饱腹低于这个, 站着发呆时换成「饿了」那张
 FEED_REACTIONS = ("fav", "like", "ok", "dislike", "weird")     # 插件接管吃的反应时, feed 事件里能记成的档
 
@@ -545,6 +553,11 @@ class PetWindow(QWidget):
         self.setCursor(Qt.OpenHandCursor)
 
         self.frames, self.real_frames = load_frames()
+        sp = ASSET_DIR / "soul.png"                    # 魂(soul_out 用); 不进立绘的共用裁剪框
+        self.soul_pm = QPixmap(str(sp)) if sp.is_file() else None
+        if self.soul_pm is not None and self.soul_pm.isNull():
+            self.soul_pm = None
+        self._soul = None                              # 魂在外面时: dict(t0, end, back_t0, why, then, side, status...)
         self.peek_frames = load_peek_frames() if self.cfg["peek"] else None
         self._codex_peek = None
         self._peek_meta = self._compute_peek_meta()
@@ -628,6 +641,7 @@ class PetWindow(QWidget):
         self._throws = deque(maxlen=12)
         self._feeds = deque(maxlen=16); self._dislikes = deque(maxlen=8); self._extra_stomach_until = 0.0
         self._spicy_at = -1e9          # 上次吃辣的(monotonic): SPICY_AGAIN 秒内再吃 -> 燃起来
+        self._dark_at = -1e9           # 上次吃黑暗料理: DARK_AGAIN 秒内再吃 -> 魂飞出来
         self._throw = None              # 正在飞的这一丢: dict(speed, hard, level, bonks, t_bonk)
         self._sulk_until = 0.0; self._sulk_calm = 0; self._sulk_click_t = 0.0; self._sulk_fx = 0.0; self._sulk_poke_say = 0.0
         self._spin_meter = 0.0; self._spin_stage = 0; self._spin_t = now
@@ -1038,6 +1052,8 @@ class PetWindow(QWidget):
         st = self.stats
         for text in self._ix.state_texts():             # 插件管的状态(超级生气、转吐……)
             return text
+        if self._soul is not None:
+            return self._soul["status"]
         acts = self.activities()
         for act, text in C.STATUS_BUSY_TEXTS:
             if act in acts:
@@ -1363,14 +1379,21 @@ class PetWindow(QWidget):
                                                       tone="alert")))
             QTimer.singleShot(4400, lambda: self._food_say(C.FOOD_SPICY_AFTER_TEXTS))
             self._note_dislike(now, quiet_until=6.0)
-        elif trait == "dark":                               # 黑暗料理: 吃完头晕
+        elif trait == "dark":                               # 黑暗料理: 吃完头晕; 刚吃过又来一份 -> 魂飞出来
+            again = now - self._dark_at < DARK_AGAIN
+            self._dark_at = now
             self.set_state("dizzy", 2.6, expr="queasy")
             self.burst("emoji", 1, at=hp + QPointF(0, -14), text="💀")
             self.burst("puff", 6, at=m, bias=(0, 0))
             self.sfx.play("huh")
-            self.say(self.pick_line(f["lines"]), force=True, tone="alert")
-            QTimer.singleShot(3200, lambda: self._food_say(C.FOOD_DARK_AFTER_TEXTS))
-            self._note_dislike(now, quiet_until=5.0)
+            self.say(self.pick_line(C.FOOD_DARK_AGAIN_TEXTS if again else f["lines"]), force=True, tone="alert")
+            if again:
+                QTimer.singleShot(1300, lambda: self.soul_out(
+                    why="dark", then=lambda: self._food_say(C.FOOD_DARK_KO_TEXTS, "alert"))
+                    or self._food_say(C.FOOD_DARK_AFTER_TEXTS))
+            else:
+                QTimer.singleShot(3200, lambda: self._food_say(C.FOOD_DARK_AFTER_TEXTS))
+            self._note_dislike(now, quiet_until=9.0 if again else 5.0)      # 魂回来以后才警告 / 闹别扭
         else:                                               # 蔬菜 / 苦: 皱着脸勉强吃
             self.set_state("shy" if trait == "veggie" else "angry", 2.4, expr="yuck")
             self.burst("sweat", 3)
@@ -2266,6 +2289,7 @@ class PetWindow(QWidget):
                 self._next_z = t + 1.5
                 hp = self.head_point()
                 self.burst("z", 1, at=QPointF(hp.x() + 18, hp.y() - 10))
+            self._step_soul(t)
             self.fx.badge = self.fx_badge if self.cfg["fx"] else None
             if self.fx.badge:
                 if self.edge:
@@ -2274,7 +2298,7 @@ class PetWindow(QWidget):
                 else:
                     self.fx.badge_pos = QPointF(self.x() + self.width() / 2 + self.char_w * 0.4, self.y() + PAD + self.hop_room + self.char_h * 0.06)
             self._update_hud()
-            self.fx.step(dt, self.geometry(), alive=self.isVisible() and bool(self.cfg["fx"] or self.fx.hud))
+            self.fx.step(dt, self.geometry(), alive=self.isVisible() and bool(self.cfg["fx"] or self.fx.hud))     # 魂只在开着特效时画
             self.update()
         except Exception as e:
             log_error("tick", e)
@@ -3425,6 +3449,9 @@ class PetWindow(QWidget):
     def on_click(self):
         now = time.monotonic()
         self.emit_event("click")
+        if self._soul is not None:                  # 魂飞出去了: 戳一下就回来
+            self._soul_back("click")
+            return
         if self._ix.call("click", False):          # 互动扩展接管(如: 究极生气时被戳)
             return
         if self.state == "sleep":
@@ -3793,6 +3820,108 @@ class PetWindow(QWidget):
     def clear_dizzy(self):
         """马上不晕了(表情不动, 要换表情另调 set_state)"""
         self._dizzy_until = 0.0
+
+    # ----- 魂飞出来 -----
+    def soul_out(self, sec=None, why="", then=None):
+        """魂飞出来: 换成「魂飞了」的脸(状态是 dizzy), 魂(assets/soul.png)从嘴里飘到头的斜上方, 晃 sec 秒再被吸回去。
+        戳她 / 拖她 / 状态被别的换掉 -> 魂马上回来。then: 魂回来以后做的事(比如原来那个「生气」收尾);
+        被拖走、被打断、睡着时不做。睡着 / 被拖着 / 在飞 / 探头 / 看不见 / 魂已经在外面 -> 不飘, 返回 False"""
+        if (self._soul is not None or self.state == "sleep" or self._dragging or self.fling is not None
+                or self.edge or not self.isVisible()):
+            return False
+        sec = SOUL_SEC if sec is None else max(0.5, float(sec))
+        now = time.monotonic()
+        self.stop_walk()
+        rect = self._normal_visible_rect()
+        side = -1 if rect.left() - rect.width() * 0.2 > self.screen_rect().left() else 1     # 默认飘到左上, 贴着左边就右上
+        why = str(why or "")
+        self._soul = dict(t0=now, end=now + SOUL_OUT_SEC + sec, back_t0=None, back_sec=SOUL_BACK_SEC[0], e0=1.0,
+                          why=why, then=then, side=side, by=None, status=random.choice(C.STATUS_SOUL_TEXTS))
+        self.set_state("dizzy", SOUL_OUT_SEC + sec + 3.0, expr="ko")
+        self.kick(-1.6)
+        self.sfx.play("whoosh")
+        self.emit_event("soul", stage="out", why=why, memo=C.SOUL_MEMO.get(why) or C.SOUL_MEMO[""])
+        return True
+
+    def _soul_e(self, t):
+        """魂出来了多少: 0 = 在嘴里, 1 = 飘到了头顶"""
+        s = self._soul
+        if s["back_t0"] is None:
+            u = min(1.0, (t - s["t0"]) / SOUL_OUT_SEC)
+            return 1 - (1 - u) ** 2
+        u = min(1.0, (t - s["back_t0"]) / s["back_sec"])
+        return s["e0"] * (1 - u * u)
+
+    def _soul_back(self, by):
+        """魂往回飞(by: time 到时间 / click 被戳 / drag 被拖 / interrupt 状态被换掉)"""
+        s = self._soul
+        if s is None or s["back_t0"] is not None:
+            return
+        t = time.monotonic()
+        s["e0"] = self._soul_e(t)
+        s["back_t0"] = t
+        s["back_sec"] = SOUL_BACK_SEC[0] if by == "time" else SOUL_BACK_SEC[1]
+        s["by"] = by
+
+    def _step_soul(self, t):
+        s = self._soul
+        if s is None:
+            self.fx.soul = None
+            return
+        if s["back_t0"] is None:
+            if self._dragging or self.fling is not None:
+                self._soul_back("drag")
+            elif self.state != "dizzy" or self._expr != "ko" or self.edge or not self.isVisible():
+                self._soul_back("interrupt")
+            elif t >= s["end"]:
+                self._soul_back("time")
+        if s["back_t0"] is not None and t - s["back_t0"] >= s["back_sec"]:
+            self._soul_done()
+            return
+        if not self.cfg["fx"]:
+            self.fx.soul = None
+            return
+        e = self._soul_e(t)
+        rect = self._normal_visible_rect()
+        w, h = rect.width(), rect.height()
+        mouth = self.mouth_point() + QPointF(-0.06 * w, 0.02 * h)
+        target = QPointF(rect.center().x() + s["side"] * 0.23 * w + math.sin(t * 3.1) * 0.035 * w,
+                         rect.top() - 0.30 * h + math.sin(t * 2.3) * 0.02 * h)
+        pos = mouth + (target - mouth) * e
+        bend = QPointF(mouth.x() + s["side"] * 0.62 * w * e, mouth.y() - 0.05 * h * e)      # 那缕烟从脸旁边绕上去
+        self.fx.soul = dict(pm=self.soul_pm, mouth=mouth, pos=pos, w=SOUL_W * w * (0.25 + 0.75 * e),
+                            alpha=SOUL_ALPHA * min(1.0, e * 2.2), side=s["side"], e=e, bend=bend)
+
+    def _soul_done(self):
+        """魂回来了: 一激灵醒过来; 到时间 / 被戳才演, 被拖走、被打断就只收起魂"""
+        s, self._soul = self._soul, None
+        self.fx.soul = None
+        by = s["by"]
+        self.burst("puff", 5, at=self.mouth_point(), bias=(0, 0))
+        self.emit_event("soul", stage="back", why=s["why"], by=by, memo=C.SOUL_BACK_MEMO.get(by))
+        if by in ("drag", "interrupt") or self.state == "sleep" or not self.isVisible():
+            return
+        if self.state == "dizzy" and self._expr == "ko":
+            self.set_state("surprised", 1.0)
+        self.kick(3.0)
+        self.sfx.play("pop")
+        self.burst("excl", 1, at=self.head_point() + QPointF(self.char_w * 0.22, -12))
+        if by == "click":
+            self.say(self.pick_line(C.SOUL_POKE_TEXTS), force=True, duration=2.2, tone="alert")
+        then = s["then"]
+
+        def after():
+            if self._dragging or self.fling is not None or self.state == "sleep" or not self.isVisible() \
+                    or self._soul is not None:
+                return
+            if then is not None:
+                try:
+                    then()
+                except Exception as e:
+                    log_error("soul then", e)
+            elif by != "click":
+                self.say(self.pick_line(C.SOUL_BACK_TEXTS), force=True, duration=3.0, tone="alert")
+        QTimer.singleShot(1100 if by == "click" else 800, after)
 
     def screen_rect(self) -> QRect:
         """她所在屏幕的可用区域(扣掉任务栏)"""

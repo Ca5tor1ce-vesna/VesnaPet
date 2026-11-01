@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """互动 DLC: 转圈转到最晕(转太多 -> 晕完)时, 先干呕再吐, 约 3.6 秒。
-吐完: 饱食度 -20(最低 0), 好感 -1, 推 "vomit" 事件; 之后 60 秒内再转只晕不吐(走原版生气逻辑)。
+吐完: 饱食度 -20(最低 0), 好感 -1, 推 "vomit" 事件; 魂从嘴里飘出来一会儿(pet.soul_out), 回来再生气;
+之后 60 秒内再转只晕不吐(走原版生气逻辑)。
 图: 同目录 vomit_pre.png / vomit.png (每次触发时重新检查, 放进来就能用); 缺图 -> 晕眩立绘泛绿 + 抖动。
 地上不留任何东西(只有短暂粒子)。
 """
@@ -181,9 +182,13 @@ class VomitFx:
             self.cool_until = t + COOLDOWN
         p.clear_dizzy()
         if not interrupted:
-            p.set_state("angry", 2.6)
-            p.burst("anger", 1, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
-            p.say(random.choice(END_LINES), force=True, duration=2.4, tone="alert")
+            def angry():
+                p.set_state("angry", 2.6)
+                p.burst("anger", 1, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
+                p.say(random.choice(END_LINES), force=True, duration=2.4, tone="alert")
+            soul_out = getattr(p, "soul_out", None)               # 吐完魂飞出来, 魂回来再生气(旧本体没有就直接生气)
+            if soul_out is None or not soul_out(why="vomit", then=angry):
+                angry()
         p.update()
 
 

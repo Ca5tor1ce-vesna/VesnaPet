@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """VesnaPet 程序化特效层: 粒子(爱心/星星/彩纸/汗滴/zZ/!?/怒气/尘土/眩晕星/小旋风/音符/emoji/雪花/雪球...)
-+ Grok 工作徽章 + 专注计时 HUD。独立的透明、鼠标穿透小窗, 跟随桌宠; 没有内容时自动隐藏。"""
++ Grok 工作徽章 + 专注计时 HUD + 飘出来的魂。独立的透明、鼠标穿透小窗, 跟随桌宠; 没有内容时自动隐藏。"""
 import math
 import random
 
@@ -188,6 +188,7 @@ class FxLayer(QWidget):
         self.badge_pos = QPointF()
         self.hud = None              # None / dict(text, frac, paused)
         self.hud_pos = QPointF()
+        self.soul = None             # None / dict(pm, mouth, pos, w, alpha, side, e, bend): 桌宠每帧算好位置
         self.clock = 0.0
         self._topmost = True
 
@@ -214,6 +215,7 @@ class FxLayer(QWidget):
         self.parts.clear()
         self.badge = None
         self.hud = None
+        self.soul = None
         self.hide()
 
     def step(self, dt, host: QRect, alive=True):
@@ -246,7 +248,7 @@ class FxLayer(QWidget):
                 p.y += p.vy * dt
             p.rot += p.vrot * dt
         self.parts = [p for p in self.parts if p.age < p.life]
-        if self.parts or self.badge or self.hud:
+        if self.parts or self.badge or self.hud or self.soul:
             m = self.MARGIN
             g = host.adjusted(-m, -m, m, m)
             if self.geometry() != g:
@@ -266,6 +268,11 @@ class FxLayer(QWidget):
         p.fillRect(self.rect(), Qt.transparent)
         p.setCompositionMode(QPainter.CompositionMode_SourceOver)
         p.translate(-self.x(), -self.y())          # 粒子使用全局坐标
+        if self.soul:
+            try:
+                self._paint_soul(p, self.soul)
+            except Exception:
+                pass
         for part in self.parts:
             try:
                 self._paint_particle(p, part)
@@ -429,6 +436,45 @@ class FxLayer(QWidget):
             p.setPen(Qt.NoPen)
             p.setBrush(QColor(255, 255, 255, 220))
             p.drawEllipse(QPointF(-q.size * 0.25, q.size * 0.25), q.size * 0.18, q.size * 0.18)
+        p.restore()
+
+    def _paint_soul(self, p, s):
+        """魂: 从嘴里绕过脸的一缕白烟 + 魂本身(半透明); 没有 soul.png 就画个小白幽灵"""
+        a = s.get("alpha", 1.0)
+        if a <= 0.01:
+            return
+        pm, m, pos, w = s.get("pm"), s["mouth"], s["pos"], s["w"]
+        h = w * pm.height() / max(1, pm.width()) if pm is not None else w * 1.15
+        e = s.get("e", 1.0)
+        tail = QPointF(pos.x() + w * 0.03, pos.y() + h * 0.40)
+        ctl = s.get("bend") or QPointF(m.x() + s.get("side", -1) * w * e, (m.y() + tail.y()) / 2 + h * 0.25 * e)
+        path = QPainterPath(m)
+        path.quadTo(ctl, tail)
+        p.save()
+        p.setOpacity(a)
+        p.setBrush(Qt.NoBrush)
+        for col, wid in ((QColor(225, 240, 255, 70), max(3.0, w * 0.09)), (QColor(242, 248, 255, 175), max(1.5, w * 0.035))):
+            pen = QPen(col, wid)
+            pen.setCapStyle(Qt.RoundCap)
+            p.setPen(pen)
+            p.drawPath(path)
+        if pm is not None:
+            p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+            p.drawPixmap(QRectF(pos.x() - w / 2, pos.y() - h / 2, w, h), pm, QRectF(pm.rect()))
+        else:
+            g = QPainterPath()
+            g.addEllipse(QRectF(pos.x() - w * 0.4, pos.y() - h * 0.5, w * 0.8, w * 0.75))
+            body = QPainterPath(QPointF(pos.x() - w * 0.4, pos.y() - h * 0.5 + w * 0.38))
+            body.quadTo(QPointF(pos.x() - w * 0.3, pos.y() + h * 0.3), tail)
+            body.quadTo(QPointF(pos.x() + w * 0.35, pos.y() + h * 0.2), QPointF(pos.x() + w * 0.4, pos.y() - h * 0.5 + w * 0.38))
+            g = g.united(body)
+            p.setPen(QPen(QColor(150, 175, 210, 200), 1.4))
+            p.setBrush(QColor(248, 251, 255, 230))
+            p.drawPath(g)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(INK))
+            for dx in (-0.13, 0.13):
+                p.drawEllipse(QPointF(pos.x() + w * dx, pos.y() - h * 0.5 + w * 0.38), w * 0.045, w * 0.06)
         p.restore()
 
     def _paint_hud(self, p, hud, pos):

@@ -84,3 +84,19 @@ she has burst into comic cartoon flames: a ring of bright orange and yellow cart
 备注：现在这张是用户自己出的，火焰撑满了整张图（顶到 y≈12）。处理办法：按头冠、眼睛和原立绘对齐，缩到 0.44 倍（Grok 这次把人画大了，
 没保留 2 倍构图）；人物上沿（每列最上面的深色描边或银色头冠）以下全留，上沿以上的火焰从 y=215 往上渐隐，到 y=131 清空。
 以后重出的话，提示词里最后那句「火不要高过蝴蝶结」最要紧。
+
+## ko.png 魂飞了（参考图 `ref_surprised.png`）+ soul.png 魂
+用在 `pet.soul_out()` 期间：电击口香糖电完、转圈转到吐完、连吃两次黑暗料理。魂是另一张图（`assets/soul.png`），由程序从嘴里飘出来，
+所以立绘里**不要**画魂。
+
+she has been completely knocked out: both eyes turned into two simple black X marks (X shapes, not > < shapes), face slightly pale with three short thin blue lines on her forehead (thin lines only, no dark shadow over her face), one sweat drop, mouth hanging open slack with the tip of her tongue out, head drooping slightly to one side, shoulders slumped, arms hanging limp at her sides. Nothing else in the picture: no ghost, no soul, no smoke, no trail. Keep her exactly the same size and position as in the reference image. Comedic defeat, not scary.
+
+备注：
+- 第一版把魂和本体画在同一张里，提示词里写了「挥手、安详、脸红」，结果她笑着升天了。第二版（21–26）不笑了，但魂画得和本人一样大，
+  一大半在共用框外面，本体也被挤小；22、24、26 的眼睛是 > < 不是 X；23–26 额头的青线成了一大块暗影。所以拆成两张。
+- 现在的 `ko.png` 是用户按上面这段出的：Grok 保留了 2 倍构图，原样缩一半就和原立绘严丝合缝。脸上还有一点红晕、嘴是闭着吐舌头，
+  想更瘫一点可以再强调 `mouth hanging wide open, no blush`。
+- `soul.png` 是从第二版的第 22 张里抠出来的魂（那张的魂是单独一块），调淡 30%、加了一圈白光，宽 240px。程序画的时候再乘 0.85 的不透明度。
+  想要更像她的魂（加翅膀、泪痣），可以单独出一张，参考图用 `ref_idle.png`，**不要**贴通用前缀：
+
+Draw a small chibi ghost version of the girl in the uploaded image — her soul: the same twin drill-curl blonde hair with teal streaks, silver tiara with a teal forehead gem, two teal ribbon bows and white hairband, pointed elf ears, small tear mole under her left eye, and tiny mint translucent fairy wings on her back. Instead of a body and legs she has a soft white ghost body ending in a wispy curled tail, with two little arms flailing. Dizzy spiral eyes, wobbly open mouth, one sweat drop, looking dazed and a little panicked, not smiling. Only this one ghost: no second character, no body below her, no smoke trail. Same art style and line weight as the uploaded image, thick white sticker outline, plain flat solid medium grey background, no text.

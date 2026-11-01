@@ -443,12 +443,16 @@ def _step_shock(self, t, dt):
     el = t - self.t0
     sec = float(self.eff.get("sec", 2.5))
     if el >= sec:
-        p.set_state("angry", 3.0)                  # 电完: 生气
-        p.sfx.play("hmph")
-        p.burst("anger", 2, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
-        p.burst("steam", 3, at=p.head_point(), bias=(0, 0))
-        self._say("effect_end_lines", 3.0)
+        def angry():                               # 电完: 生气
+            p.set_state("angry", 3.0)
+            p.sfx.play("hmph")
+            p.burst("anger", 2, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
+            p.burst("steam", 3, at=p.head_point(), bias=(0, 0))
+            self._say("effect_end_lines", 3.0)
         self.stop("done")
+        # 先魂飞出来(电得魂都出窍了), 魂回来再生气; 被拖着等飘不了就直接生气
+        if not p.soul_out(why="shock", then=angry):
+            angry()
         return
     if self.stage == 0:                            # 一下电到: 全身一抖
         self.stage = 1
