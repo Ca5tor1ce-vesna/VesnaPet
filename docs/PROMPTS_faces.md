@@ -55,3 +55,8 @@ she has just been soaked with water and is grumpy about it: blonde hair a shade 
 she is hungry and out of energy: one gloved hand pressed against her tummy, the other hand loosely holding her wand lowered, shoulders slumped a little, droopy tired eyes looking up at the viewer with a pleading look, eyebrows sagging, small wavy open mouth, a tiny bit of drool at the corner of her mouth, one small sweat drop, and two or three little wavy growl lines coming from her tummy. Weak and pitiful but cute, not sick.
 
 备注：出了两轮，用的是第二轮的第 7 版（眼睛下垂没力气、含泪流口水、手捂肚子、有咕噜线），构图和 idle 一致，原样缩一半就对齐了。第一轮有一张把 `#808080` 当文字画了进去，所以前缀里已经删掉了颜色代码。
+
+## cold.png 好冷（参考图 `ref_idle.png`）
+暴雪天她冷的时候用（天气插件换脸），没有图时借委屈那张。围巾是插件另外画上去的，所以图里不要围巾。
+
+she is freezing in a blizzard: shoulders hunched up, both gloved hands held together in front of her mouth, blowing warm breath on them with a small puff of white breath, tip of her nose and cheeks red from the cold, eyes half shut and a little teary, eyebrows sagging, a few snowflakes stuck on her hair, tiara and ribbons, small shiver lines beside her body. No scarf. Cute and pitiful, not sick.

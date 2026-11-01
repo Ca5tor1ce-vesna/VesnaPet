@@ -46,7 +46,8 @@ PEEK_EXTRA = {"peek_happy": "peek_awake", "peek_surprised": "peek_awake"}
 # 只换脸的表情: 不是新状态。状态还是右边那个(动作、计时、互动规则全照旧), 只是这会儿画这张图;
 # assets 里没有这张图就照常画右边那个状态的图。谁来换: set_state(..., expr=) / stand_key 自己判断 / 插件 expr()
 FACES = {"pout": "shy", "smug": "content", "hungry": "idle", "queasy": "dizzy",
-         "sulk": "angry", "held": "surprised", "yuck": "angry", "wet": "angry"}
+         "sulk": "angry", "held": "surprised", "yuck": "angry", "wet": "angry",
+         "cold": "pout"}             # cold 只给插件用(expr), 没图时借委屈那张
 HUNGRY_FACE = 25                # 饱腹低于这个, 站着发呆时换成「饿了」那张
 
 # ---------------- 可调参数 ----------------
@@ -179,6 +180,8 @@ TUNABLE = {
     "greet_cheer": ("bool", None, None),        # 迎接时(好友起)要不要欢呼、蹦、冒爱心; False = 只挥挥手
     "status_line": ("text", 1, 20),             # 小屋头部「没事时」那句; ctx: kind(hungry|butterfly|level), level
     "drag_hold_rate": ("float", 0.0, 2.0),      # 拖着她时挣扎计时走多快(1 = 原版; 0.25 = 慢慢来); ctx: held(真实秒数), stage
+    "butterfly_gap": ("float", 30.0, 86400.0),  # 下一只蝴蝶自己飞来要等多少秒; ctx: first(启动后第一只)
+    "butterfly_ok": ("bool", None, None),       # 到点了, 这会儿让不让蝴蝶自己飞来(False = 这次不来, 照常排下一次)
     "hungry_remind": ("float", 0.0, 86400.0),   # 饿了提醒的间隔(秒), 0 = 本体不提醒(交给插件)
     "sneak_done_lines": ("lines", None, None),  # 偷吃没被发现, 吃完得意的那句的台词池
     "sneak_caught_lines": ("lines", None, None),  # 偷吃被你点到, 害羞否认的那句的台词池
@@ -1390,11 +1393,12 @@ class PetWindow(QWidget):
     def _schedule_butterfly(self, first=False):
         lo, hi = BUTTERFLY_EVERY
         sec = random.uniform(60, 150) if first else random.uniform(lo, hi)
+        sec = self._tune("butterfly_gap", sec, first=first)
         self.bfly_timer.start(int(sec * 1000))
 
     def _auto_butterfly(self):
         try:
-            if self.cfg["butterfly"] and self.can_auto("auto_butterfly"):
+            if self.cfg["butterfly"] and self.can_auto("auto_butterfly") and self._tune("butterfly_ok", True):
                 self.summon_butterfly(auto=True)
         except Exception as e:
             log_error("auto butterfly", e)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""VesnaPet 程序化特效层: 粒子(爱心/星星/彩纸/汗滴/zZ/!?/怒气/尘土/眩晕星/小旋风/音符/emoji/魔法阵...)
+"""VesnaPet 程序化特效层: 粒子(爱心/星星/彩纸/汗滴/zZ/!?/怒气/尘土/眩晕星/小旋风/音符/emoji/雪花/雪球...)
 + Grok 工作徽章 + 专注计时 HUD。独立的透明、鼠标穿透小窗, 跟随桌宠; 没有内容时自动隐藏。"""
 import math
 import random
@@ -162,6 +162,14 @@ def _spawn(kind, x, y, bias, text=""):
     if kind == "orbit":
         return Particle(kind, x, y, cx=x, cy=y, r=R(30, 42), ang=R(0, 2 * math.pi), w=R(4, 6), life=3.0,
                         size=R(5, 7), color=QColor(random.choice(GOLD)))
+    if kind == "snow":
+        # 雪花: bias = 风(像素/秒), 往下飘、左右轻轻摆; 风大(暴雪)时画成斜着的短线
+        return Particle(kind, x + R(-6, 6), y, vx=bx + R(-10, 10), vy=max(18.0, by + R(26, 46)), life=R(2.4, 3.6),
+                        size=R(1.8, 3.6), ang=R(0, 2 * math.pi), w=R(1.6, 2.8), color=QColor(255, 255, 255))
+    if kind == "snowball":
+        # 雪球: 从 (x, y) 抛到 (x + bias.x, y + bias.y), 带一点弧线
+        return Particle(kind, x, y, sx=x, sy=y, tx=x + bx, ty=y + by, life=0.55, size=R(6.0, 7.5),
+                        color=QColor(255, 255, 255))
     return None
 
 
@@ -224,6 +232,10 @@ class FxLayer(QWidget):
                 u = min(1.0, p.age / p.life)
                 p.x = p.sx + (p.tx - p.sx) * u
                 p.y = p.sy + (p.ty - p.sy) * u * u - 26 * math.sin(math.pi * u)
+            elif p.kind == "snowball":
+                u = min(1.0, p.age / p.life)
+                p.x = p.sx + (p.tx - p.sx) * u
+                p.y = p.sy + (p.ty - p.sy) * u - 40 * math.sin(math.pi * u)
             else:
                 p.vy += p.g * dt
                 if p.drag:
@@ -337,6 +349,27 @@ class FxLayer(QWidget):
             p.drawPath(path)
             p.setPen(QPen(q.color.lighter(115), 1.6, Qt.SolidLine, Qt.RoundCap))
             p.drawLine(QPointF(-s * 0.8, s * 0.28), QPointF(s * 0.2, s * 0.28))
+        elif kind == "snow":
+            sp = math.hypot(q.vx, q.vy)
+            if sp > 150:                                   # 暴雪: 斜着的短线
+                tail = QPointF(-q.vx * 0.035, -q.vy * 0.035)
+                p.setPen(QPen(QColor(150, 178, 214, 170), q.size * 1.1 + 1.2, Qt.SolidLine, Qt.RoundCap))
+                p.drawLine(QPointF(0, 0), tail)
+                p.setPen(QPen(q.color, q.size * 1.1, Qt.SolidLine, Qt.RoundCap))
+                p.drawLine(QPointF(0, 0), tail)
+            else:
+                p.translate(5 * math.sin(q.age * q.w + q.ang), 0)
+                p.setPen(QPen(QColor(150, 178, 214, 190), 0.8))
+                p.setBrush(q.color)
+                p.drawEllipse(QPointF(0, 0), q.size, q.size)
+        elif kind == "snowball":
+            p.setOpacity(1.0)
+            p.setPen(QPen(QColor(150, 170, 200), 1.2))
+            p.setBrush(q.color)
+            p.drawEllipse(QPointF(0, 0), q.size, q.size)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(214, 228, 246))
+            p.drawEllipse(QPointF(q.size * 0.3, q.size * 0.3), q.size * 0.45, q.size * 0.35)
         elif kind in ("dust", "puff"):
             p.setPen(Qt.NoPen)
             p.setBrush(q.color)
