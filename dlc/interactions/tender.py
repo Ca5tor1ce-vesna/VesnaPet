@@ -40,6 +40,9 @@ CARRY_SETTLE = 1.2                  # 稳稳地抱着走这么久, 她就不扑�
 RATE_CARRY, RATE_CARRY_STILL, RATE_SHAKE = 0.25, 0.5, 1.5
 CARRY_LINES = ["……诶?是、是抱着吗……", "嗯……这样被抱着走,还挺舒服的。", "(不扑腾了)……慢点走哦。"]
 CARRY_THANKS = ["……谢谢你轻轻放下我。", "到啦?嘿嘿,下次还要这样抱。", "……被抱着走的感觉,还不错。"]
+STATUS_CARRY = "被稳稳抱着走,不扑腾了……"
+STATUS_CARRY_STILL = "抱在怀里,安安静静的……"
+STATUS_HOLD = "双脚离地,正想挣下来……"
 
 # ----- 2. 一直摸 -----
 PET_GAP = 4.5                       # 两下摸头间隔这么久以内, 算连着摸
@@ -501,6 +504,19 @@ class Tender:
         if d and d["carried"] and not d.get("stage") and state == DRAG_STATE and self.pet.dragging:
             return "content"                           # 被抱着: 不扑腾了, 眯眼笑(开始喊「放我下来」就不笑了)
         return None
+
+    def state_text(self):
+        """小屋头部: 抱着 vs 抓住要分开; 优先于本体「双脚离地」那句"""
+        d = self.drag
+        if not d or not self.pet.dragging or d.get("block"):
+            return None
+        if d.get("carried") and not d.get("stage"):
+            if d.get("speed", 0) >= CARRY_SPEED[0]:
+                return STATUS_CARRY
+            return STATUS_CARRY_STILL
+        if d.get("carried") and d.get("stage"):
+            return STATUS_HOLD                         # 抱着抱着又开始喊放下来
+        return STATUS_HOLD                             # 还没抱稳 / 乱晃: 抓住
 
     def on_pet(self):
         """连着摸头: 第二下起换成这里的阶段; 第一下、忙的时候、刚摸够了, 都交回原版"""
