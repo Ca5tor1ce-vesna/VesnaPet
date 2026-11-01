@@ -47,7 +47,8 @@ PEEK_EXTRA = {"peek_happy": "peek_awake", "peek_surprised": "peek_awake"}
 # assets 里没有这张图就照常画右边那个状态的图。谁来换: set_state(..., expr=) / stand_key 自己判断 / 插件 expr()
 FACES = {"pout": "shy", "smug": "content", "hungry": "idle", "queasy": "dizzy",
          "sulk": "angry", "held": "surprised", "yuck": "angry", "wet": "angry",
-         "cold": "pout"}             # cold 只给插件用(expr), 没图时借委屈那张
+         "cold": "pout",              # cold 只给插件用(expr), 没图时借委屈那张
+         "frozen": "wet"}            # frozen 暴雪浇水冻住; 没图时借湿漉漉(再借 angry)
 HUNGRY_FACE = 25                # 饱腹低于这个, 站着发呆时换成「饿了」那张
 
 # ---------------- 可调参数 ----------------

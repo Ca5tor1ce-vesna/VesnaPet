@@ -60,3 +60,10 @@ she is hungry and out of energy: one gloved hand pressed against her tummy, the 
 暴雪天她冷的时候用（天气插件换脸），没有图时借委屈那张。围巾是插件另外画上去的，所以图里不要围巾。
 
 she is freezing in a blizzard: shoulders hunched up, both gloved hands held together in front of her mouth, blowing warm breath on them with a small puff of white breath, tip of her nose and cheeks red from the cold, eyes half shut and a little teary, eyebrows sagging, a few snowflakes stuck on her hair, tiara and ribbons, small shiver lines beside her body. No scarf. Cute and pitiful, not sick.
+
+## frozen.png 暴雪浇水冻住（参考图 `ref_wet.png`；没有就用 `ref_cold.png` / `ref_idle.png`）
+用在暴雪里被浇水之后整个人冻住（本地天气 DLC × 浇水）。成品放 `assets/frozen.png`。建议进 `FACES`（回退借 `wet`；没有 wet 再借 `cold`/`pout`），并在 `content.CODEX` 加一行，图鉴才会列。围巾仍由插件另画，图里不要围巾。
+
+she has just been soaked with water in a blizzard and frozen solid: a clear crystalline ice shell and frost coating her hair, face, capelet, gloves and wand, with a few sharp ice facets and tiny icicles hanging from her drill curls, tiara and ribbons; blonde hair a shade darker as if wet under the ice, water droplets turned into frozen beads; eyes wide open and a little teary, eyebrows raised then drooping, mouth a small aggrieved open "eh?!" pout, cheeks flushed pink from the cold; body stiff and slightly hunched as if mid-shiver locked in place, a few short freeze-crack motion lines and tiny ice crystal sparkles close around her (stay inside the sticker bounds). No scarf. Still a bust shot cropped flat at the bottom. Cute and pitiful, not scary, not covered so thick that the tiara, teal bows, tear mole or mint wings disappear.
+
+备注：头冠、青蝴蝶结、泪痣、薄荷翅在冰壳里也必须看得清。冰是透明/半透明晶体，不要整块不透明白冰把脸糊死。地上不要积水、不要雪堆、不要全画面暴风雪背景。建议出 3–4 版，挑冰壳薄、五官还能认、构图和 idle/wet 同框的那张；Grok 改图时原样缩一半对齐。
