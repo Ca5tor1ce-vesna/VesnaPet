@@ -53,7 +53,8 @@ FACES = {"pout": "shy", "smug": "content", "hungry": "idle", "queasy": "dizzy",
          "fire": "spicy",            # 整个人燃起来(刚吃完辣的又来一口; 插件: 火炉烫到等); 没图时借喷火那张
          "ko": "dizzy",              # 魂飞了(X 眼): soul_out() 期间; 没图时借转晕那张
          "notiara": "surprised",     # 头冠被抢走、捂着头(插件 tease 用; 没这张图插件就不让抢)
-         "ouch": "pout"}             # 被弹脑门、揉额头(插件 tease); 没图时借委屈那张
+         "ouch": "pout",             # 被弹脑门、揉额头(插件 tease); 没图时借委屈那张
+         "icecube": "frozen"}        # 冻住时又被浇, 整个人冻成一块方冰(天气 DLC); 没图时借冻住那张
 SPICY_AGAIN = 90.0              # 吃完辣的这么多秒内又吃辣的 -> 不是喷火, 是整个人燃起来
 DARK_AGAIN = 120.0              # 吃完黑暗料理这么多秒内又吃 -> 魂飞出来
 # 魂飞出来(soul_out): 魂(assets/soul.png)从嘴里飘出来, 在头的斜上方晃, 到时间再被吸回去; 戳她 / 拖她会马上回来

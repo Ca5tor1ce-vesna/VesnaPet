@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """互动 DLC「捉弄」: 欺负欺负她。
-  1. 在她脸上画画: 她睡着时 右键 / 托盘「互动」-> 🖌 在她脸上画画。鼠标变成笔, 在她身上按住拖就是画, 右键或菜单「画好了」收笔。
+  1. 在她脸上画画: 她睡着时 右键 / 托盘「互动」-> 🖌 在她脸上画画(醒着时菜单里没有这一项)。鼠标变成一支小毛笔,
+     在她身上按住拖就是画, 右键或菜单「画好了」收笔。
      画多了她会痒得动一下(「唔……」), 这时候停一停; 动完 1.2 秒内还接着画就会把她弄醒 —— 当场被抓包, 更生气。
      醒了她不知道, 顶着一脸涂鸦到处晃; 过几分钟自己发现, 或者你给她「🪞 照照镜子」: 先愣住, 再炸毛, 一边擦一边记仇
      (5 分钟内摸头会被拍开)。心情 -6(被抓包 -8)。
@@ -96,6 +97,31 @@ STATUS_BUMP = "额头上鼓着个小包,时不时摸一下……"
 BUSY_HER = {"hidden", "drag", "fling", "throw", "spin", "danika", "food_fx", "edge", "frozen"}
 
 
+def _brush_cursor():
+    """画画时的鼠标: 一支小毛笔(木杆 + 银箍 + 黑笔头), 笔尖就是落笔的点"""
+    pm = QPixmap(32, 32)
+    pm.fill(Qt.transparent)
+    q = QPainter(pm)
+    q.setRenderHint(QPainter.Antialiasing, True)
+    q.setPen(QPen(QColor(255, 255, 255), 8, Qt.SolidLine, Qt.RoundCap))     # 白边: 深色桌面上也看得见
+    q.drawLine(QPointF(27, 5), QPointF(12, 20))
+    q.setPen(QPen(QColor(70, 46, 30), 6, Qt.SolidLine, Qt.RoundCap))
+    q.drawLine(QPointF(27, 5), QPointF(12, 20))
+    q.setPen(QPen(QColor(200, 146, 88), 3.6, Qt.SolidLine, Qt.RoundCap))
+    q.drawLine(QPointF(27, 5), QPointF(12, 20))
+    q.setPen(QPen(QColor(168, 178, 198), 5, Qt.SolidLine, Qt.FlatCap))      # 银箍
+    q.drawLine(QPointF(14, 18), QPointF(11, 21))
+    tip = QPainterPath(QPointF(12.5, 18.5))                                  # 笔头
+    tip.quadTo(QPointF(5.5, 20.5), QPointF(2, 30))
+    tip.quadTo(QPointF(9.5, 26.5), QPointF(13.5, 21.5))
+    tip.closeSubpath()
+    q.setPen(QPen(QColor(255, 255, 255), 1.3))
+    q.setBrush(QColor(INK))
+    q.drawPath(tip)
+    q.end()
+    return QCursor(pm, 2, 29)
+
+
 def _pick(pool, last=None):
     c = [x for x in pool if x != last] or list(pool)
     return random.choice(c)
@@ -153,6 +179,7 @@ class Tease:
         self.notice_at = self.wipe_t0 = 0.0
         self.grudge_until = 0.0
         self.caught = False
+        self._brush = None                   # 毛笔光标(第一次画时才做)
         # 2. 头冠
         tp = ASSETS / "tiara.png"
         self.tiara_pm = QPixmap(str(tp)) if tp.is_file() else None
@@ -351,7 +378,9 @@ class Tease:
         if self.doodle not in (None, "fresh"):
             self.strokes, self.doodle = [], None
         p.capture_mouse(self)
-        p.setCursor(Qt.CrossCursor)
+        if self._brush is None:
+            self._brush = _brush_cursor()
+        p.setCursor(self._brush)
 
     def end_doodle(self, quiet=False):
         if not self.drawing:

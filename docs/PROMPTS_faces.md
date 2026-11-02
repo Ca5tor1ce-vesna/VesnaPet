@@ -101,6 +101,10 @@ she has been completely knocked out: both eyes turned into two simple black X ma
 
 Draw a small chibi ghost version of the girl in the uploaded image — her soul: the same twin drill-curl blonde hair with teal streaks, silver tiara with a teal forehead gem, two teal ribbon bows and white hairband, pointed elf ears, small tear mole under her left eye, and tiny mint translucent fairy wings on her back. Instead of a body and legs she has a soft white ghost body ending in a wispy curled tail, with two little arms flailing. Dizzy spiral eyes, wobbly open mouth, one sweat drop, looking dazed and a little panicked, not smiling. Only this one ghost: no second character, no body below her, no smoke trail. Same art style and line weight as the uploaded image, thick white sticker outline, plain flat solid medium grey background, no text.
 
+## icecube.png 冰块（用户自己出的）
+天气 DLC：冻住时再被浇，整个人冻成一块方冰。冰块比半身像高，缩到 0.44 倍才放得进共用框（冰里的她比平时小一圈，冻在冰里小一点也合理）。
+裂缝是程序画的，图里不要画裂缝。
+
 ## notiara.png 头冠被抢（参考图 `ref_surprised.png`）
 插件 `tease` 抢头冠时用：头冠在你手里，她捂着头追。**没有这张图就不让抢头冠**（不然她头上还戴着一个、你手里又一个）。
 这一张要把通用前缀里的 `silver tiara with a teal forehead gem,` 删掉，再接：
