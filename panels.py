@@ -149,8 +149,9 @@ class ActionMenu(CardWindow):
             ("🧊", "达妮卡", self._act(pet.summon_danika)),
             ("🎉", "放彩带", self._act(lambda: (pet.note_interaction(), pet.celebrate()))),
         ]
-        hub = getattr(pet, "_ix", None)                 # 互动扩展注册的菜单项(没装就没有)
-        for emoji, label, fn in (hub.menu_items() if hub is not None and hasattr(hub, "menu_items") else []):
+        ix_items = self._ix_items()                     # 互动扩展注册的菜单项(没装就没有; 每次打开菜单重新问, 见 open_at)
+        self._ix_sig = [(e, l) for e, l, _ in ix_items]
+        for emoji, label, fn in ix_items:
             items.append((emoji, label, self._act(fn)))
         self.main_tiles = self._grid(pg, items, 17, 76)
         rows = (len(items) + 3) // 4
@@ -355,8 +356,18 @@ class ActionMenu(CardWindow):
         self.pet.sfx.play("tick")
         self.update()
 
+    def _ix_items(self):
+        hub = getattr(self.pet, "_ix", None)
+        return list(hub.menu_items()) if hub is not None and hasattr(hub, "menu_items") else []
+
     def open_at(self, gpos: QPoint):
         self._avatar = None
+        if [(e, l) for e, l, _ in self._ix_items()] != self._ix_sig:     # 插件的菜单项变了(比如她睡着了才有「画画」): 重建主页
+            old = self.pages.pop("main", None)
+            if old is not None:
+                old.hide()
+                old.deleteLater()
+            self._build_main()
         self.show_page("main")
         scr = QGuiApplication.screenAt(gpos) or QGuiApplication.primaryScreen()
         g = scr.availableGeometry()

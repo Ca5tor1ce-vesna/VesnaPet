@@ -537,10 +537,12 @@ class IconTile(QAbstractButton):
         px = 12
         while px > 9 and QFontMetrics(font(px, QFont.DemiBold)).horizontalAdvance(self.label) > W - 2:
             px -= 1                                   # 名字太长就缩小一点
-        p.setFont(font(px, QFont.DemiBold))
+        f = font(px, QFont.DemiBold)
+        p.setFont(f)
         p.setPen(mix(INK2, MINT_D, k))
         ty = box.bottom() + 3
-        p.drawText(QRectF(-4, ty, W + 8, 16), Qt.AlignHCenter | Qt.AlignTop, self.label)
+        label = QFontMetrics(f).elidedText(self.label, Qt.ElideRight, int(W + 6))     # 最小号还放不下: 省略
+        p.drawText(QRectF(-4, ty, W + 8, 16), Qt.AlignHCenter | Qt.AlignTop, label)
         if self.sub:
             p.setFont(font(10, QFont.Normal))
             p.setPen(getattr(self, "sub_color", None) or MUTED)

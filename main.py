@@ -834,8 +834,9 @@ class PetWindow(QWidget):
         play.addAction("🧊  达妮卡来访", lambda: self.summon_danika(False))
         play.addAction("👣  过来~", self.come_here)
         play.addAction("🎉  放彩带", lambda: (self.note_interaction(), self.celebrate()))
-        for emoji, label, fn in self._ix.menu_items():          # 互动扩展注册的菜单项; 没装就没有
-            play.addAction(f"{emoji}  {label}", fn)
+        self._play_menu, self._play_ix = play, []
+        self._fill_play_ix()                                     # 互动扩展注册的菜单项; 没装就没有
+        play.aboutToShow.connect(self._fill_play_ix)            # 每次弹出重新问(有的项只在某些时候有, 比如她睡着了才能画画)
         focus = m.addMenu("🍅  专注"); style_menu(focus)
         for mins in (15, 25, 45, 60):
             focus.addAction(f"{mins} 分钟", lambda mins=mins: self.start_focus(mins))
@@ -886,6 +887,13 @@ class PetWindow(QWidget):
         run = self.focus_end is not None
         self.act_focus_pause.setEnabled(run)
         self.act_focus_stop.setEnabled(run)
+
+    def _fill_play_ix(self):
+        play = self._play_menu
+        for a in self._play_ix:
+            play.removeAction(a)
+            a.deleteLater()
+        self._play_ix = [play.addAction(f"{emoji}  {label}", fn) for emoji, label, fn in self._ix.menu_items()]
 
     def _panel(self, name):
         p = self._panels.get(name)

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """互动 DLC「捉弄」: 欺负欺负她。
-  1. 在她脸上画画: 她睡着时 右键 / 托盘「互动」-> 🖌 在她脸上画画(醒着时菜单里没有这一项)。鼠标变成一支小毛笔,
+  1. 在她脸上画画: 她睡着时 右键 / 托盘「互动」-> 🖌 画花脸(醒着时菜单里没有这一项)。鼠标变成一支小毛笔,
      在她身上按住拖就是画, 右键或菜单「画好了」收笔。
      画多了她会痒得动一下(「唔……」), 这时候停一停; 动完 1.2 秒内还接着画就会把她弄醒 —— 当场被抓包, 更生气。
      醒了她不知道, 顶着一脸涂鸦到处晃; 过几分钟自己发现, 或者你给她「🪞 照照镜子」: 先愣住, 再炸毛, 一边擦一边记仇
@@ -28,7 +28,7 @@ from pathlib import Path
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer
 from PySide6.QtGui import (QColor, QCursor, QGuiApplication, QPainter, QPainterPath, QPen, QPixmap,
                            QRadialGradient)
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QToolTip, QWidget
 
 from stats import data_dir
 
@@ -302,7 +302,7 @@ class Tease:
         if self.drawing:
             items.append(("✅", "画好了", self.end_doodle))
         elif p.state == "sleep" and p.isVisible() and not p.edge:
-            items.append(("🖌", "在她脸上画画(右键收笔)", self.start_doodle))
+            items.append(("🖌", "画花脸", self.start_doodle))
         if self.doodle == "wearing" and p.state != "sleep":
             items.append(("🪞", "给她照照镜子", self.mirror))
         if self.tiara_ok() and self.tia is None and p.state != "sleep":
@@ -381,6 +381,7 @@ class Tease:
         if self._brush is None:
             self._brush = _brush_cursor()
         p.setCursor(self._brush)
+        QToolTip.showText(QCursor.pos(), "在她身上按住拖动 = 画\n右键 = 收笔", None, QRect(), 4000)
 
     def end_doodle(self, quiet=False):
         if not self.drawing:
