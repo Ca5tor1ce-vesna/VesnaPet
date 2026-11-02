@@ -108,8 +108,14 @@ Draw a small chibi ghost version of the girl in the uploaded image — her soul:
 her silver tiara and the teal forehead gem have been snatched away and are completely gone from the picture; both gloved hands pressed flat on top of her head where the tiara used to be, eyes wide and teary, eyebrows raised in alarm, small wobbly open mouth as if crying "give it back!", one sweat drop; the white hairband and the two teal ribbon bows stay in place. No tiara anywhere in the picture.
 
 备注：额前的青宝石是挂在头冠上的，所以也要一起没有。被抢走的头冠是 `assets/tiara.png`（从 idle.png 里抠的，不用出）。
+- 用 `ref_surprised.png` 出，怎么出都会多出两只手：参考图里她拿着法杖，Grok 要保留法杖又要两只手捂头，只好再画两只。
+  换成 `ref_held.png`（被拎起那张：没有法杖，两只手本来就举在头两边），四张都只有两只手。
+- 现在的 `notiara.png` 是第 35 张（两只手平按在头顶）。33 左脸有一块灰印子；36 也能用。保留了 2 倍构图，原样缩一半就对齐。
 
 ## ouch.png 被弹脑门（参考图 `ref_angry.png`，可选）
 插件 `tease` 弹脑门后用；没有就借委屈那张。额头的小包是程序画的，图里**不要**画包。
 
 she has just been flicked on the forehead: one gloved hand rubbing the side of her forehead (the hand stays at the side, the middle of her forehead stays visible), big teary eyes squeezed half shut, cheeks puffed in a pout, small wavy "ow" mouth, two tiny pain lines beside her forehead. Do not draw any bump or red mark on her forehead.
+
+备注：现在的 `ouch.png` 是第 53 张：额前青宝石还在、嘴是「疼」的波浪线。54、55 把额前宝石画丢了。
+她的手正好盖在程序画包的位置，所以这张脸显示时不画包（揉完换回别的脸，包就露出来了）。

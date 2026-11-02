@@ -782,7 +782,7 @@ class Tease:
         w, h = pm.width() / dpr, pm.height() / dpr
         q = QPainter(out)
         q.setRenderHint(QPainter.Antialiasing, True)
-        if self.bump > 0.01 and key != "notiara":              # 额头的小包(捂着头那张就不画)
+        if self.bump > 0.01 and key not in ("notiara", "ouch"):  # 额头的小包(捂着头 / 揉额头那两张, 手正盖着, 不画)
             bx, by = FLICK_SPOT
             r = w * (0.022 + 0.022 * min(1.6, self.bump))
             a = min(1.0, self.bump * 1.4)

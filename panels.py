@@ -6,7 +6,7 @@ import time
 from datetime import date
 
 from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, Qt, QTimer
-from PySide6.QtGui import (QColor, QFont, QGuiApplication, QLinearGradient, QPainter, QPainterPath, QPen,
+from PySide6.QtGui import (QColor, QFont, QFontMetrics, QGuiApplication, QLinearGradient, QPainter, QPainterPath, QPen,
                            QPixmap, QRadialGradient)
 from PySide6.QtWidgets import QScrollArea, QWidget
 
@@ -642,10 +642,15 @@ class _Codex(QWidget):
                 p.setPen(QColor("#A3AEC8"))
                 p.setFont(font(16, QFont.Bold))
                 p.drawText(box, Qt.AlignCenter, "?")
-            p.setFont(font(10, QFont.DemiBold if not locked else QFont.Normal))
+            label = name if not locked else "???"
+            for px in (10, 9, 8):                           # 格子窄(8 列)时长名字缩小一号, 再放不下就省略
+                f = font(px, QFont.DemiBold if not locked else QFont.Normal)
+                if QFontMetrics(f).horizontalAdvance(label) <= self.CW - 2:
+                    break
+            p.setFont(f)
+            label = QFontMetrics(f).elidedText(label, Qt.ElideRight, self.CW - 2)
             p.setPen(INK2 if not locked else MUTED)
-            p.drawText(QRectF(x, y + self.CW - 3, self.CW, 16), Qt.AlignHCenter | Qt.AlignTop,
-                       name if not locked else "???")
+            p.drawText(QRectF(x, y + self.CW - 3, self.CW, 16), Qt.AlignHCenter | Qt.AlignTop, label)
         p.end()
 
 
