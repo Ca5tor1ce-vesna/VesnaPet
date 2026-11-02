@@ -11,7 +11,8 @@
   每戳一下多气 4 秒(剩余最多回到 45 秒); 摸到一半又戳 = 前功尽弃, 摸头次数清零。推 "rage_poke"。
   拖着时的右键菜单被拦下(只拦拖着的时候)。
 台词来源标 src="water", 语音插件不会播。推 "watered"(dodged, asleep, forced, stuck)。
-别的插件报「frozen」(动不了)时她躲不开: 浇个正着, 推 watered(dodged=False, stuck=True), 表情和台词交给那个插件。
+别的插件报「frozen」(动不了)时她躲不开: 浇个正着, 推 watered(dodged=False, stuck=True), 表情和台词交给那个插件;
+这时也不进究极生气(强行浇水把她冻住了就不气了), 连着浇只隔 1 秒。
 """
 import random
 import time
@@ -47,7 +48,9 @@ POKE_WARN_LINES = ["你是嫌我还不够生气吗?!", "再戳……再戳我就
 POKE_BLOW_LINES = ["风元素——看招!!", "说了别戳!吹飞你!", "呼——!给我离远点!", "这是你自找的!"]
 POKE_UNDO_LINES = ["刚有一点点消气……你又戳!", "前功尽弃!重新哄!", "哼,刚才摸的都不算了!"]
 BUSY = {"drag", "fling", "throw", "food_fx", "edge", "spin", "danika", "vomit"}   # 这些时候浇不了
-STUCK = {"frozen"}                 # 别的插件报的「动不了」(比如天气 DLC 冻住了): 躲不开, 浇个正着(反应交给那个插件)
+STUCK = {"frozen"}                 # 别的插件报的「动不了」(比如天气 DLC 冻住了): 躲不开, 浇个正着(反应交给那个插件);
+                                   # 也不进究极生气(冻成冰了还跺脚吹风说不通), 冷却缩到 STUCK_COOLDOWN
+STUCK_COOLDOWN = 1.0
 
 
 class Water:
@@ -138,6 +141,8 @@ class Water:
     def _start_rage(self, t):
         p = self.pet
         self.rage_pending = False
+        if p.activities() & STUCK:                    # 强行浇水把她冻住了: 动不了, 不生这个气
+            return
         self.rage = dict(t0=t, next_fx=t, next_say=t + 0.2, next_stomp=t + 2.0, pets=0,
                          pokes=0, poke_say=0.0, next_blow=0.0, turn_until=0.0)
         p.set_state("angry")
@@ -309,7 +314,9 @@ class Water:
     def water(self):
         p = self.pet
         now = time.monotonic()
-        if self.job is not None or now < self.cool_until or not p.isVisible():
+        stuck = bool(p.activities() & STUCK)
+        cool = self.cool_until - (COOLDOWN - STUCK_COOLDOWN if stuck else 0.0)     # 动不了时连着浇也行(只防连点)
+        if self.job is not None or now < cool or not p.isVisible():
             return
         if self.rage is not None or self.force is not None:
             self._say(SLAP_LINES, 1.8)
@@ -319,7 +326,6 @@ class Water:
             self._say(BUSY_LINES, 1.8)
             return
         asleep = p.state == "sleep"
-        stuck = bool(p.activities() & STUCK)
         p.stop_walk()
         hp = p.head_point()
         spout = QPointF(hp.x() + p.char_w * 0.12, hp.y() - p.char_h * 0.32)
@@ -336,6 +342,8 @@ class Water:
             self._step_force(t)
         if self.rage_pending and not self.pet.dragging and self.pet.fling is None:
             self._start_rage(t)
+        if self.rage is not None and (self.pet.activities() & STUCK):
+            self.rage = None                          # 气着气着被冻住了: 这场气算了
         if self.rage is not None:
             self._step_rage(t)
         j = self.job
