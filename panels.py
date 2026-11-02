@@ -557,7 +557,7 @@ class _Stat(QWidget):
 
 
 class _Codex(QWidget):
-    """表情图鉴格子; 列哪几格由 pet.codex() 决定(新加的脸要真有图才列)。格子多了就压矮一点, 再多就排 7 列"""
+    """表情图鉴格子; 列哪几格由 pet.codex() 决定(新加的脸要真有图才列)。格子多了就压矮一点, 再多就排 7 列、8 列"""
     CW, CH, COLS = 56, 74, 6
 
     def __init__(self, parent, pet, max_h=346):
@@ -568,7 +568,9 @@ class _Codex(QWidget):
         self.thumbs = {}
         self.setMouseTracking(True)
         n = len(self.entries)
-        if n > 30:
+        if n > 35:                                  # 7 列 5 行放不下了: 排 8 列(最多 40 格)
+            self.COLS, self.CW = 8, 43
+        elif n > 30:
             self.COLS, self.CW = 7, 49
         rows = max(1, math.ceil(n / self.COLS))
         self.CH = max(self.CW + 13, min(74, max_h // rows))

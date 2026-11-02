@@ -10,7 +10,8 @@
   期间戳她(单击/双击)不走原版的「别戳啦」: 第 1 下瞪你, 第 2 下扭头不理, 3–4 下警告, 第 5 下起跺脚朝你吹风(4 秒一次);
   每戳一下多气 4 秒(剩余最多回到 45 秒); 摸到一半又戳 = 前功尽弃, 摸头次数清零。推 "rage_poke"。
   拖着时的右键菜单被拦下(只拦拖着的时候)。
-台词来源标 src="water", 语音插件不会播。推 "watered"(dodged, asleep, forced)。
+台词来源标 src="water", 语音插件不会播。推 "watered"(dodged, asleep, forced, stuck)。
+别的插件报「frozen」(动不了)时她躲不开: 浇个正着, 推 watered(dodged=False, stuck=True), 表情和台词交给那个插件。
 """
 import random
 import time
@@ -46,6 +47,7 @@ POKE_WARN_LINES = ["你是嫌我还不够生气吗?!", "再戳……再戳我就
 POKE_BLOW_LINES = ["风元素——看招!!", "说了别戳!吹飞你!", "呼——!给我离远点!", "这是你自找的!"]
 POKE_UNDO_LINES = ["刚有一点点消气……你又戳!", "前功尽弃!重新哄!", "哼,刚才摸的都不算了!"]
 BUSY = {"drag", "fling", "throw", "food_fx", "edge", "spin", "danika", "vomit"}   # 这些时候浇不了
+STUCK = {"frozen"}                 # 别的插件报的「动不了」(比如天气 DLC 冻住了): 躲不开, 浇个正着(反应交给那个插件)
 
 
 class Water:
@@ -317,13 +319,14 @@ class Water:
             self._say(BUSY_LINES, 1.8)
             return
         asleep = p.state == "sleep"
+        stuck = bool(p.activities() & STUCK)
         p.stop_walk()
         hp = p.head_point()
         spout = QPointF(hp.x() + p.char_w * 0.12, hp.y() - p.char_h * 0.32)
         p.burst("emoji", 1, at=QPointF(spout.x() + 14, spout.y() - 6), bias=(0, 0), text="🚿")
-        self.job = dict(asleep=asleep, t0=now, spout=spout, next=now, moved=False)
+        self.job = dict(asleep=asleep, stuck=stuck, t0=now, spout=spout, next=now, moved=False)
         self.cool_until = now + COOLDOWN
-        if not asleep:                                # 醒着: 稍等一下就闪开
+        if not asleep and not stuck:                  # 醒着: 稍等一下就闪开
             self.job["dodge_at"] = now + 0.18
         p.sfx.play("whoosh")
 
@@ -344,7 +347,13 @@ class Water:
             j["next"] = t + 0.05
             s = j["spout"]
             p.burst("sweat", 2, at=QPointF(s.x() + random.uniform(-6, 6), s.y()), bias=(0, 0))
-        if not j["asleep"]:
+        if j["stuck"]:                                # 动不了: 浇个正着
+            if el >= 0.45 and not j.get("hit"):
+                j["hit"] = True
+                self._hit_stuck()
+            if el >= POUR + 0.1:
+                self.job = None
+        elif not j["asleep"]:
             if not j["moved"] and t >= j["dodge_at"]:
                 j["moved"] = True
                 if p.dragging or p.fling is not None:           # 这时被抓/被丢: 算了
@@ -420,6 +429,16 @@ class Water:
         from PySide6.QtCore import QTimer
         QTimer.singleShot(500, angry)
         p.emit_event("watered", dodged=False, asleep=True)
+
+
+    def _hit_stuck(self):
+        """她动不了(冻住了之类)时被浇: 只有水花和好感 -1, 不换表情不说话 —— 让她动不了的那个插件自己接 watered(stuck=True)"""
+        p = self.pet
+        hp = p.head_point()
+        p.burst("sweat", 8, at=hp, bias=(0, 0))
+        p.burst("drop", 3, at=hp, bias=(0, 0))
+        p.gain(-1, quiet=True)
+        p.emit_event("watered", dodged=False, asleep=False, stuck=True)
 
 
 def create(pet, log_fn=None):

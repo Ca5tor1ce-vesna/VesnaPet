@@ -20,9 +20,12 @@
   expr(key, state) -> str | None 每帧画立绘前问: 要不要换一张脸(main.FACES 里的名字, 如超级生气时换 "wet")。
                                 key 是本体选好的图, state 是状态; None = 不换。多个插件按 priority 依次传下去。
                                 只换图, 状态和逻辑不变; 那张图不存在就照常画
-  paint(key, pm, t) -> (pm, dx) 画立绘前调用, 可替换图/加水平抖动
+  paint(key, pm, t) -> (pm, dx) 画立绘前调用, 可替换图/加水平抖动; 按 priority 从大到小画, 小的盖在上面
   on_say(text, src)             她冒台词气泡时通知
   on_mouse_press(event) -> bool 鼠标按下(任意键)先问插件; True = 插件吃掉这次按下
+  on_drag_begin(pos, delta) -> bool  左键按住刚挪过拖动门槛、本体要开始拖她之前; True = 插件接管(一般 pet.capture_mouse(self))
+  on_capture_press/move/release(e)   插件 pet.capture_mouse(self) 之后, 她身上的鼠标事件只交给它, 直到 pet.release_mouse()
+  on_feed(food) -> bool         投喂时最先问; True = 插件接管(想真的喂调 pet.feed(key, ask=False))
   on_wheel(event) -> bool        滚轮转圈前先问插件; True = 插件吃掉(不转、不攒晕度)
   on_context_menu(event) -> bool 右键菜单弹出前先问插件; True = 不弹
   status_text() -> str | None   插件想显示的一行状态(托盘提示、右键卡片的状态行), 如「小心愿: 想吃甜的」
@@ -211,8 +214,9 @@ class Hub:
         return rows
 
     def paint(self, key, pm, t):
+        """按 priority 从大到小依次画(同级按加载顺序), 后画的盖在上面: priority 小的(如 tease 的涂鸦)最后画"""
         dx = 0.0
-        for pl in list(self.plugins):
+        for pl in sorted(self.plugins, key=lambda x: -getattr(x, "priority", 0)):
             f = getattr(pl, "paint", None)
             if f is not None:
                 try:

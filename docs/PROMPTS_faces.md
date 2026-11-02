@@ -100,3 +100,16 @@ she has been completely knocked out: both eyes turned into two simple black X ma
   想要更像她的魂（加翅膀、泪痣），可以单独出一张，参考图用 `ref_idle.png`，**不要**贴通用前缀：
 
 Draw a small chibi ghost version of the girl in the uploaded image — her soul: the same twin drill-curl blonde hair with teal streaks, silver tiara with a teal forehead gem, two teal ribbon bows and white hairband, pointed elf ears, small tear mole under her left eye, and tiny mint translucent fairy wings on her back. Instead of a body and legs she has a soft white ghost body ending in a wispy curled tail, with two little arms flailing. Dizzy spiral eyes, wobbly open mouth, one sweat drop, looking dazed and a little panicked, not smiling. Only this one ghost: no second character, no body below her, no smoke trail. Same art style and line weight as the uploaded image, thick white sticker outline, plain flat solid medium grey background, no text.
+
+## notiara.png 头冠被抢（参考图 `ref_surprised.png`）
+插件 `tease` 抢头冠时用：头冠在你手里，她捂着头追。**没有这张图就不让抢头冠**（不然她头上还戴着一个、你手里又一个）。
+这一张要把通用前缀里的 `silver tiara with a teal forehead gem,` 删掉，再接：
+
+her silver tiara and the teal forehead gem have been snatched away and are completely gone from the picture; both gloved hands pressed flat on top of her head where the tiara used to be, eyes wide and teary, eyebrows raised in alarm, small wobbly open mouth as if crying "give it back!", one sweat drop; the white hairband and the two teal ribbon bows stay in place. No tiara anywhere in the picture.
+
+备注：额前的青宝石是挂在头冠上的，所以也要一起没有。被抢走的头冠是 `assets/tiara.png`（从 idle.png 里抠的，不用出）。
+
+## ouch.png 被弹脑门（参考图 `ref_angry.png`，可选）
+插件 `tease` 弹脑门后用；没有就借委屈那张。额头的小包是程序画的，图里**不要**画包。
+
+she has just been flicked on the forehead: one gloved hand rubbing the side of her forehead (the hand stays at the side, the middle of her forehead stays visible), big teary eyes squeezed half shut, cheeks puffed in a pout, small wavy "ow" mouth, two tiny pain lines beside her forehead. Do not draw any bump or red mark on her forehead.

@@ -112,6 +112,11 @@ def _spawn(kind, x, y, bias, text=""):
         # (x, y) = 嘴的位置; 从头顶上方抛进嘴里
         return Particle(kind, x, y - 120, sx=x + R(-30, 30), sy=y - 130, tx=x, ty=y, life=0.75, size=30,
                         text=text or "\U0001F370")
+    if kind == "yank":
+        # 假装喂: 从头顶飞到嘴边, 快到嘴了又被抽走(往斜上方飞回去)
+        side = random.choice((-1, 1))
+        return Particle(kind, x, y - 120, sx=x + R(-30, 30), sy=y - 130, tx=x, ty=y - 8,
+                        cx=x + side * R(70, 100), cy=y - R(150, 180), life=1.0, size=30, text=text or "\U0001F370")
     if kind == "crumb":
         return Particle(kind, x + R(-10, 10), y + R(-4, 4), vx=R(-60, 60), vy=R(-120, -40), g=520, life=R(0.5, 0.8),
                         size=R(1.8, 3.2), color=QColor(random.choice(("#E8B86A", "#F4D8A0", "#C98A4A"))))
@@ -205,7 +210,7 @@ class FxLayer(QWidget):
         for _ in range(int(n)):
             p = _spawn(kind, float(x), float(y), bias, text)
             if p is not None:
-                if pm is not None and kind in ("food", "emoji"):
+                if pm is not None and kind in ("food", "emoji", "yank"):
                     p.pm = pm
                 self.parts.append(p)
         if len(self.parts) > MAX_PARTICLES:
@@ -234,6 +239,17 @@ class FxLayer(QWidget):
                 u = min(1.0, p.age / p.life)
                 p.x = p.sx + (p.tx - p.sx) * u
                 p.y = p.sy + (p.ty - p.sy) * u * u - 26 * math.sin(math.pi * u)
+            elif p.kind == "yank":
+                u = min(1.0, p.age / p.life)
+                if u < 0.55:                                # 飞到嘴边
+                    v = u / 0.55
+                    p.x = p.sx + (p.tx - p.sx) * v
+                    p.y = p.sy + (p.ty - p.sy) * v * v - 26 * math.sin(math.pi * v)
+                else:                                       # 被抽走
+                    v = (u - 0.55) / 0.45
+                    v = v * v
+                    p.x = p.tx + (p.cx - p.tx) * v
+                    p.y = p.ty + (p.cy - p.ty) * v
             elif p.kind == "snowball":
                 u = min(1.0, p.age / p.life)
                 p.x = p.sx + (p.tx - p.sx) * u
@@ -251,6 +267,9 @@ class FxLayer(QWidget):
         if self.parts or self.badge or self.hud or self.soul:
             m = self.MARGIN
             g = host.adjusted(-m, -m, m, m)
+            if self.soul:                               # 魂被揪远了: 窗口也跟着包住它
+                sp, sw = self.soul["pos"], self.soul["w"] * 1.8
+                g = g.united(QRect(int(sp.x() - sw), int(sp.y() - sw), int(sw * 2), int(sw * 2)))
             if self.geometry() != g:
                 self.setGeometry(g)
             if not self.isVisible():
@@ -394,9 +413,12 @@ class FxLayer(QWidget):
             else:
                 p.setFont(_font(q.size, False, True))
                 p.drawText(QRectF(-q.size, -q.size, q.size * 2, q.size * 2), Qt.AlignCenter, q.text)
-        elif kind == "food":
+        elif kind in ("food", "yank"):
             u = q.age / q.life
-            s = 1.0 if u < 0.75 else max(0.2, 1 - (u - 0.75) * 3)
+            if kind == "yank":
+                s = 1.0 if u < 0.8 else max(0.2, 1 - (u - 0.8) * 4)
+            else:
+                s = 1.0 if u < 0.75 else max(0.2, 1 - (u - 0.75) * 3)
             p.setOpacity(1.0)
             p.rotate(-25 * math.sin(u * math.pi * 2))
             p.scale(s * pop, s * pop)
@@ -458,6 +480,14 @@ class FxLayer(QWidget):
             pen.setCapStyle(Qt.RoundCap)
             p.setPen(pen)
             p.drawPath(path)
+        st = s.get("stretch")
+        if st:                                      # 被揪着: 沿着扯的方向拉长、另一边变细
+            ang, k = st
+            p.translate(pos)
+            p.rotate(ang)
+            p.scale(k, 1.0 / math.sqrt(k))
+            p.rotate(-ang)
+            p.translate(-pos)
         if pm is not None:
             p.setRenderHint(QPainter.SmoothPixmapTransform, True)
             p.drawPixmap(QRectF(pos.x() - w / 2, pos.y() - h / 2, w, h), pm, QRectF(pm.rect()))
