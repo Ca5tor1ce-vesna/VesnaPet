@@ -13,6 +13,8 @@
      10 分钟内再 Ctrl 喂她不上当; 这段时间真喂她, 她也要先眯眼确认一下才吃。心情 -2。
   4. 弹脑门: 按住她额头别动, 0.3 秒后开始蓄力(她会紧张), 松手「啪」一下 —— 蓄得越久越疼, 额头鼓起一个小包, 慢慢消。
      30 秒内弹三下, 她会捂住额头半分钟不让弹。心情 -1.5 ~ -4。要 assets/ouch.png(揉额头), 没有就借委屈那张。
+达妮卡来访时(调节口 danika_script): 她脸上被画了还不知道 -> 达妮卡指出来、拿毛巾帮她擦掉, 走了以后她冲你生气;
+     额头有包 -> 达妮卡问是谁弹的。
 好感: 每样每天最多扣 DAILY 次(各 -1)。推事件: doodle(stage) / tiara(stage) / fake_feed(n) / flick(power), 都带 memo。
 记在 <数据目录>/tease.json(每天扣过几次)。priority = -2: 别的插件先接; 画在立绘上的东西(涂鸦、小包)最后画, 盖在最上面。
 只用公开接口(docs/接口规范.md)。不想要就删掉这个文件。
@@ -94,7 +96,16 @@ FLICK_GUARDED = ["不许再弹了!(捂住额头)", "哼,额头不给你!"]
 FLICK_CANCEL = ["……呼?不弹了?", "……吓死我了。"]
 STATUS_BUMP = "额头上鼓着个小包,时不时摸一下……"
 
-BUSY_HER = {"hidden", "drag", "fling", "throw", "spin", "danika", "food_fx", "edge", "frozen"}
+BUSY_HER = {"hidden", "drag", "fling", "throw", "spin", "danika", "food_fx", "edge", "frozen", "sick"}
+
+# ----- 达妮卡来访时: 脸上被画了 / 额头有包 -----
+DANIKA_DOODLE = [("danika", "……薇斯纳大人。您脸上。"), ("vesna", "脸上?……有什么吗?"),
+                 ("danika", "……有人在您脸上画了画。"), ("vesna", "诶?!……我、我的脸——!"),
+                 ("danika", "别动。……擦掉了。"), ("danika", "下次睡觉记得锁门。告辞。")]
+DANIKA_WIPE_LINE = 4                 # 第 5 句(「擦掉了」)开始的时候擦
+DANIKA_BUMP = [("danika", "……额头怎么肿了。"), ("vesna", "……被、被弹的!"), ("danika", "谁弹的。"),
+               ("vesna", "哼……就是那个人!"), ("danika", "……我记下了。告辞。")]
+DANIKA_AFTER = ["……你!在我脸上画了画还不告诉我!!", "达妮卡都看见了!……你给我等着!"]
 
 
 def _brush_cursor():
@@ -193,6 +204,8 @@ class Tease:
         self.fpend, self.charge = None, None
         self.bump, self.bump_t = 0.0, 0.0
         self.flicks, self.flick_guard = [], 0.0
+        self.dvisit = None                   # 达妮卡这次来是冲着涂鸦 / 小包: dict(kind, asked, t0, wiped)
+        self.quiet_wipe = False              # 达妮卡帮她擦的: 擦完不自己嘟囔
 
     # ----- 存档 / 小工具 -----
     def _load(self):
@@ -309,8 +322,60 @@ class Tease:
             items.append(("👑", "抢她的头冠", self.steal_from_menu))
         return items
 
+    def tune(self, name, value, ctx):
+        if name != "danika_script" or value is not None:          # 别的插件(生病……)已经换了就不抢
+            return None
+        p = self.pet
+        if self.doodle == "wearing" and self.strokes and p.state != "sleep":
+            self.dvisit = dict(kind="doodle", asked=time.monotonic(), t0=None, wiped=False)
+            return list(DANIKA_DOODLE)
+        if self.bump > 0.35 and p.state != "sleep":
+            self.dvisit = dict(kind="bump", asked=time.monotonic(), t0=None, wiped=False)
+            return list(DANIKA_BUMP)
+        return None
+
+    def _danika_step(self, t):
+        dv = self.dvisit
+        if dv is None:
+            return
+        if dv["t0"] is None:
+            if t - dv["asked"] > 1.0:                             # 问了剧本但没来成
+                self.dvisit = None
+            return
+        d = self.pet.danika                                     # 进场多久 + 每句多久(和达妮卡那边一样算)
+        wipe_at = getattr(d, "ENTER_SEC", 1.15) + DANIKA_WIPE_LINE * getattr(d, "LINE_SEC", 3.6) * 0.95
+        if dv["kind"] == "doodle" and not dv["wiped"] and t - dv["t0"] >= wipe_at and self.doodle == "wearing":
+            dv["wiped"] = True                                     # 达妮卡拿毛巾擦掉
+            self.doodle, self.wipe_t0, self.quiet_wipe = "wiping", t, True
+            self.pet.burst("sparkle", 3, at=self.pet.head_point())
+
+    def _danika_after(self, skipped):
+        dv, self.dvisit = self.dvisit, None
+        p = self.pet
+        if dv is None or dv["kind"] != "doodle" or not dv["wiped"]:
+            return
+        t = time.monotonic()
+        p.mood.add(-6.0)
+        self._lose("doodle")
+        self.grudge_until = t + GRUDGE_SEC
+        p.emit_event("doodle", stage="found", by="danika",
+                     memo="达妮卡来访时指出她脸上被画了画，帮她擦掉了；她知道是你画的，很生气（互动）")
+
+        def mad():
+            if p.state == "sleep" or not p.isVisible():
+                return
+            p.set_state("angry", 3.0)
+            p.burst("anger", 2, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
+            p.sfx.play("hmph")
+            self._say("dafter", DANIKA_AFTER, 3.0)
+        QTimer.singleShot(700, mad)
+
     def on_event(self, name, data):
         t = time.monotonic()
+        if name == "danika_visit" and data.get("custom") and self.dvisit is not None and self.dvisit["t0"] is None:
+            self.dvisit["t0"] = t
+        elif name == "danika_end":
+            self._danika_after(bool(data.get("skipped")))
         if name == "wake":
             if self.drawing:
                 self.end_doodle(quiet=True)
@@ -537,8 +602,9 @@ class Tease:
             self._cache.clear()
             if u >= 1.0:
                 self.strokes, self.doodle, self.ink = [], None, 1.0
-                if p.state != "sleep" and p.isVisible():
+                if p.state != "sleep" and p.isVisible() and not self.quiet_wipe:
                     self._say("wiped", DOODLE_WIPED, 2.4)
+                self.quiet_wipe = False
 
     # ----- 2. 抢头冠 -----
     def steal_from_menu(self):
@@ -861,6 +927,7 @@ class Tease:
         if self.drawing and self.pet.state != "sleep":
             self.end_doodle(quiet=True)
         self._doodle_step(t)
+        self._danika_step(t)
         self._tiara_step(t, dt)
         self._flick_step(t, dt)
 

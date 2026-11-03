@@ -206,6 +206,8 @@ TUNABLE = {
     "hungry_remind": ("float", 0.0, 86400.0),   # 饿了提醒的间隔(秒), 0 = 本体不提醒(交给插件)
     "sneak_done_lines": ("lines", None, None),  # 偷吃没被发现, 吃完得意的那句的台词池
     "sneak_caught_lines": ("lines", None, None),  # 偷吃被你点到, 害羞否认的那句的台词池
+    "danika_script": ("script", 1, 12),         # 达妮卡这次来说什么: [(who, line), ...], who = danika / vesna;
+                                                # None = 照常从 content.DANIKA_VISITS 里随机挑。ctx: auto
 }
 
 TRAY_QSS = """
@@ -1683,10 +1685,11 @@ class PetWindow(QWidget):
                 self.say("先把面板关上嘛~", force=True)
             return False
         # 手动触发无视冷却; 自动仍受 DANIKA_EVERY 约束(调用方已查)
-        ok = self.danika.start()
+        script = self._tune("danika_script", None, auto=bool(auto))     # 插件可以换这次的对话(脸上被画了、生病了……)
+        ok = self.danika.start(script)
         if ok:
             self._danika_next = time.monotonic() + random.uniform(*DANIKA_EVERY)
-            self.emit_event("danika_visit", auto=bool(auto))
+            self.emit_event("danika_visit", auto=bool(auto), custom=script is not None)
             self.bubble_timer.stop()
             self.happy_timer.stop()
             if not auto:
@@ -3842,6 +3845,16 @@ class PetWindow(QWidget):
             return lines or value
         if kind == "text":
             return v.strip()[:hi] if isinstance(v, str) and v.strip() else value
+        if kind == "script":                          # [(who, line), ...]: 有一句不合法就整个不用
+            if not isinstance(v, (list, tuple)) or not (lo <= len(v) <= hi):
+                return value
+            out = []
+            for it in v:
+                if not (isinstance(it, (list, tuple)) and len(it) == 2 and it[0] in ("danika", "vesna")
+                        and isinstance(it[1], str) and it[1].strip()):
+                    return value
+                out.append((it[0], it[1].strip()[:60]))
+            return out
         return value
 
     def plugin_status(self):
