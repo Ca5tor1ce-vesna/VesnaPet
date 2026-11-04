@@ -15,7 +15,7 @@
      30 秒内弹三下, 她会捂住额头半分钟不让弹。心情 -1.5 ~ -4。要 assets/ouch.png(揉额头), 没有就借委屈那张。
   5. 抢法杖(和头冠反着来): 按住杖头往外(离开她身子那边)一拽, 法杖到你手里(也可以菜单「🪄 抢她的法杖」), 你捏着杖身。
      她不追: 站着伸手念咒往回叫, 每隔几秒法杖在你手里往她那边挣一下, 一次比一次猛; 离她近就被叫回去, 跑远点能撑一阵,
-     念到第六次一定回去。你拿着它左右甩(或左键点一下)= 乱施法, 魔法打到她身上(开花 / 飘起来 / 被电一下 / 下雪),
+     念咒时你把法杖往远处挣能压住她这一轮, 不挣又离得近才会被叫回去。你拿着它左右甩(或左键点一下)= 乱施法, 魔法打到她身上(开花 / 飘起来 / 被电一下 / 下雪),
      正在念的咒也被打断。挥到第三下炸了: 她被炸得灰头土脸(脸上的灰慢慢掉), 法杖还在你手里。挥到第六下她被打晕
      (X 眼、头上绕星星), 晕着的 20 秒叫不回法杖, 这时候再挥法杖也没劲了; 醒过来气坏了, 下一次念咒一定把法杖叫回去。
      右键 = 还给她(她会消点气)。拿回来后 90 秒内再伸手, 她抱紧法杖不给。心情 -3, 每挥一下 -1, 炸了再 -2, 打晕再 -3。
@@ -98,7 +98,8 @@ WAND_HAND = (0.21, 0.60)             # 叫回来时法杖飞到哪(立绘比例)
 WAND_TUG_FIRST = 2.0                 # 抢走后多久第一次念咒
 WAND_TUG_GAP = 3.6                   # 两次念咒之间
 WAND_TUG_SEC = 1.3                   # 一次念咒往回拽多久
-WAND_TUG_K = (0.3, 0.45, 0.6, 0.78, 0.9, 1.0)   # 第几次念咒把法杖往她那儿拽多少(1 = 一定拽回去)
+WAND_TUG_K = (0.28, 0.38, 0.48, 0.56, 0.64, 0.72)   # 这一轮你不挣的话, 最多把法杖拽过全程的多少; 到不了 1
+WAND_RESIST = 64.0                   # 念咒时往离开她的方向挣这么多像素, 这一轮的劲就被抵消; 后面几轮要挣得更远
 WAND_REACH = 0.55                    # 法杖被拽到离她的手这么近(立绘宽的倍数)就回到她手里
 WAND_RET_SEC = 0.4                   # 飞回她手里要多久
 WAND_CAST_COOL = 1.3                 # 乱施法的间隔
@@ -112,6 +113,7 @@ WAND_SPELLS = ("flower", "float", "zap", "snow")
 WAND_STOLEN = ["啊!我的法杖!!", "法、法杖还我!!", "那个不能乱拿的!!"]
 WAND_SUMMON = ["法杖,回来!", "……以薇斯纳之名——回来!", "回——来——!"]
 WAND_TUG_FAIL = ["……唔,差一点!", "你、你别攥那么紧!", "可恶……拉不过来……"]
+WAND_TUG_FIGHT = ["唔——!你别拽!!", "拉、拉不过去……!", "放手……法杖是我的!"]
 WAND_CHASE = ["先把法杖还我!", "不许拿着它乱跑!"]
 WAND_CAST = {"flower": ["诶?!……怎么开花了?!", "别、别乱挥!!"], "float": ["哇啊?!……放我下来!!", "飘、飘起来了?!"],
              "zap": ["呀!……麻、麻了……", "电、电到我了!!"], "snow": ["阿嚏!……好冷!!", "怎么下雪了?!……是你干的吧!"]}
@@ -1112,7 +1114,7 @@ class Tease:
         """晕醒了: 气坏了, 下一次念咒一定把法杖叫回去"""
         p, wd = self.pet, self.wand
         wd["ko"] = None
-        wd["tugs"] = max(wd["tugs"], len(WAND_TUG_K) - 1)
+        wd["sure"] = True                                 # 醒过来这一轮: 不跟你对拉, 一定叫回去
         wd["next_tug"] = t + 2.2
         p.kick(-1.6)
         p.set_state("angry", 2.2)
@@ -1251,12 +1253,24 @@ class Tease:
                 self._say("wfail", WAND_TUG_FAIL, 1.8)
                 p.emit_event("wand", stage="tug", n=wd["tugs"], ok=False)
             else:
-                ramp = min(1.0, u / 0.6)
-                pull = tug["k"] * ramp * ramp * (3 - 2 * ramp)
+                ramp = min(1.0, u / 0.55)
+                smooth = ramp * ramp * (3 - 2 * ramp)
                 hand = self._hand()
+                if tug.get("sure"):
+                    resist = 0.0
+                else:
+                    origin = tug["origin"]
+                    d0 = math.hypot(origin.x() - hand.x(), origin.y() - hand.y())
+                    d1 = math.hypot(cur.x() - hand.x(), cur.y() - hand.y())
+                    need = WAND_RESIST * (0.75 + 0.12 * min(wd["tugs"], 6))
+                    resist = min(1.0, max(0.0, d1 - d0) / need)
+                pull = tug["k"] * smooth * (1.0 - resist)
                 target = cur + (hand - cur) * pull
-                w.glow = min(1.0, u * 3.0)
-                w.rot = 6.0 * math.sin(t * 38.0)
+                w.glow = min(1.0, u * 3.0) * (1.0 - 0.65 * resist)
+                w.rot = (6.0 + 10.0 * resist) * math.sin(t * (38.0 + 24.0 * resist))
+                if resist >= 0.55 and not tug.get("fought"):
+                    tug["fought"] = True
+                    self._say("wfight", WAND_TUG_FIGHT, 1.4)
                 if t >= wd["spark"]:
                     wd["spark"] = t + 0.25
                     p.burst("sparkle", 1, at=hand)
@@ -1271,7 +1285,9 @@ class Tease:
         w.grip_at(target)
         w.update()
         if tug is None and wd["ko"] is None and t >= wd["next_tug"]:   # 再念一次咒
-            wd["tug"] = dict(t0=t, k=WAND_TUG_K[min(wd["tugs"], len(WAND_TUG_K) - 1)])
+            sure = bool(wd.pop("sure", False))
+            k = 1.0 if sure else WAND_TUG_K[min(wd["tugs"], len(WAND_TUG_K) - 1)]
+            wd["tug"] = dict(t0=t, k=k, origin=QPointF(QCursor.pos()), fought=False, sure=sure)
             wd["tugs"] += 1
             wd["next_tug"] = t + WAND_TUG_SEC + WAND_TUG_GAP
             p.stop_walk()
