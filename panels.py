@@ -357,6 +357,9 @@ class ActionMenu(CardWindow):
         self.update()
 
     def _ix_items(self):
+        fn = getattr(self.pet, "menu_items_all", None)              # 本体会变的项(哄她睡觉) + 插件的
+        if fn is not None:
+            return list(fn())
         hub = getattr(self.pet, "_ix", None)
         return list(hub.menu_items()) if hub is not None and hasattr(hub, "menu_items") else []
 

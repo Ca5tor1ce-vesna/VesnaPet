@@ -9,7 +9,7 @@ from pathlib import Path
 
 from content import level_info
 
-DAILY_CAPS = {"feed": 6, "rps": 10, "pet": 15, "jump": 5, "butterfly": 8}
+DAILY_CAPS = {"feed": 6, "rps": 10, "pet": 15, "jump": 5, "butterfly": 8, "lull": 2}
 HUNGER_PER_HOUR = 9.0           # 运行时每小时掉多少饱腹
 OFFLINE_FLOOR = 35.0            # 关掉期间最多饿到这里(她会自己找吃的~)
 

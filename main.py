@@ -54,7 +54,8 @@ FACES = {"pout": "shy", "smug": "content", "hungry": "idle", "queasy": "dizzy",
          "ko": "dizzy",              # 魂飞了(X 眼): soul_out() 期间; 没图时借转晕那张
          "notiara": "surprised",     # 头冠被抢走、捂着头(插件 tease 用; 没这张图插件就不让抢)
          "ouch": "pout",             # 被弹脑门、揉额头(插件 tease); 没图时借委屈那张
-         "icecube": "frozen"}        # 冻住时又被浇, 整个人冻成一块方冰(天气 DLC); 没图时借冻住那张
+         "icecube": "frozen",        # 冻住时又被浇, 整个人冻成一块方冰(天气 DLC); 没图时借冻住那张
+         "nowand": "held"}           # 法杖被抢走、两手空空(插件 tease); 没图时借被拎起来那张(也没拿法杖)
 SPICY_AGAIN = 90.0              # 吃完辣的这么多秒内又吃辣的 -> 不是喷火, 是整个人燃起来
 DARK_AGAIN = 120.0              # 吃完黑暗料理这么多秒内又吃 -> 魂飞出来
 # 魂飞出来(soul_out): 魂(assets/soul.png)从嘴里飘出来, 在头的斜上方晃, 到时间再被吸回去; 戳她 / 拖她会马上回来
@@ -83,6 +84,9 @@ WAKE_SPIN_GRACE = 1.2           # 转醒后这段时间内的滚轮不计入晕�
 WAKE_RUDE_COOL = 300.0          # 粗暴叫醒扣好感的冷却(秒)
 SLEEP_MUMBLE_COOL = 25.0        # 梦话最小间隔(秒)
 SLEEP_MUMBLE_P = 0.3            # 鼠标经过时说梦话的概率
+LULL_STEPS = (2.8, 2.6, 2.2)    # 哄睡: 打哈欠 -> 揉眼睛、脑袋一点一点 -> 说晚安 -> 睡着, 每步多久(秒); 摸一下头快一步
+LULL_HUNGRY = 12                # 饱腹低于这个: 饿得睡不着
+LULL_BUSY = {"drag", "fling", "throw", "edge", "danika", "food_fx", "spin", "dizzy"}   # 这些时候哄不了
 ANGRY_SEC = 2.0
 RAPID_CLICKS = 3
 RAPID_WINDOW = 1.6
@@ -162,26 +166,26 @@ ACTIVITIES = {
     "sulk": "闹别扭", "spin": "滚轮转圈中/转过头待发作", "dizzy": "晕着",
     "danika": "达妮卡来访", "butterfly": "蝴蝶在场", "panel": "开着面板(小屋/运势/猜拳等)",
     "focus": "专注计时(未暂停)", "link": "Grok 联动工作中", "away": "你离开电脑了(仅 Windows)",
-    "plugin": "有插件的 busy() 非空",
+    "plugin": "有插件的 busy() 非空", "lull": "被你哄着睡觉(右键「哄她睡觉」)",
 }
 AUTO = {   # 自动行为: (只在这些表情下做, None = 不限; 会拦住它的活动)
-    "idle_action": (("idle",), {"hidden", "drag", "fling", "walk", "food_fx", "plugin"}),
-    "danika_auto": (None, {"edge", "sulk", "danika", "butterfly", "panel", "focus", "link"}),
+    "idle_action": (("idle",), {"hidden", "drag", "fling", "walk", "food_fx", "plugin", "lull"}),
+    "danika_auto": (None, {"edge", "sulk", "danika", "butterfly", "panel", "focus", "link", "lull"}),
     "danika": (None, {"sleep", "edge", "drag", "fling", "walk", "sulk", "link"}),
-    "random_bubble": (("idle", "happy"), {"hidden", "drag", "food_fx", "danika", "focus", "link", "plugin"}),
+    "random_bubble": (("idle", "happy"), {"hidden", "drag", "food_fx", "danika", "focus", "link", "plugin", "lull"}),
     "sneak": (("idle",), {"edge", "drag", "fling", "walk", "sulk", "danika", "butterfly", "focus", "link",
-                          "plugin"}),
-    "auto_butterfly": (None, {"hidden", "sleep", "drag", "food_fx", "butterfly", "focus", "plugin"}),
+                          "plugin", "lull"}),
+    "auto_butterfly": (None, {"hidden", "sleep", "drag", "food_fx", "butterfly", "focus", "plugin", "lull"}),
     "chase": (None, {"hidden", "sleep", "dizzy", "edge", "drag", "fling", "sulk", "food_fx", "danika", "panel",
                      "focus", "link", "plugin"}),
     "fall_asleep": (("idle",), {"drag", "fling", "walk"}),
-    "reminder": (None, {"drag", "fling", "sulk", "danika", "focus", "plugin"}),
+    "reminder": (None, {"drag", "fling", "sulk", "danika", "focus", "plugin", "lull"}),
     "welcome_back": (None, {"hidden", "drag", "fling", "throw", "food_fx", "sulk", "danika", "focus", "link",
-                            "plugin"}),
+                            "plugin", "lull"}),
     "plugin_talk": (("idle", "look", "look_left", "content", "happy"),       # 插件主动开口(小心愿/她记得)
                     {"hidden", "sleep", "drag", "fling", "throw", "walk", "chase", "sneak", "food_fx", "sulk", "spin",
-                     "dizzy", "danika", "butterfly", "panel", "focus", "link", "away", "plugin"}),
-    "live_say": (None, {"sleep", "dizzy", "drag", "fling", "throw", "spin", "danika", "food_fx", "plugin"}),
+                     "dizzy", "danika", "butterfly", "panel", "focus", "link", "away", "plugin", "lull"}),
+    "live_say": (None, {"sleep", "dizzy", "drag", "fling", "throw", "spin", "danika", "food_fx", "plugin", "lull"}),
 }
 # 插件能通过 tune() 调的参数(心情 / 好感要不要影响行为, 由插件决定; 本体只在这些决策点问一句):
 # 名字 -> (类型, 下限, 上限)。插件给的值不合法就用原值; 文档 docs/接口规范.md 有同一张表。
@@ -208,6 +212,8 @@ TUNABLE = {
     "sneak_caught_lines": ("lines", None, None),  # 偷吃被你点到, 害羞否认的那句的台词池
     "danika_script": ("script", 1, 12),         # 达妮卡这次来说什么: [(who, line), ...], who = danika / vesna;
                                                 # None = 照常从 content.DANIKA_VISITS 里随机挑。ctx: auto
+    "lull_ok": ("bool", None, None),            # 右键「哄她睡觉」: 这会儿肯不肯被哄(False = 不肯, 说 lull_refuse_lines)
+    "lull_refuse_lines": ("lines", None, None), # 不肯被哄时说的那句
 }
 
 TRAY_QSS = """
@@ -642,6 +648,7 @@ class PetWindow(QWidget):
         self._pet_hist = deque(maxlen=12); self._pet_dir = 0; self._pet_x = None; self._pet_cool = 0.0
         self._wheel_hist = deque(maxlen=30)
         self._yawned = False
+        self._lull = None                   # 正在被哄睡: dict(tok, n 到第几步, pets 摸了几下)
         self._next_z = 0.0
         self._cursor_prev = None
         self._last_tick = time.monotonic()
@@ -895,7 +902,7 @@ class PetWindow(QWidget):
         for a in self._play_ix:
             play.removeAction(a)
             a.deleteLater()
-        self._play_ix = [play.addAction(f"{emoji}  {label}", fn) for emoji, label, fn in self._ix.menu_items()]
+        self._play_ix = [play.addAction(f"{emoji}  {label}", fn) for emoji, label, fn in self.menu_items_all()]
 
     def _panel(self, name):
         p = self._panels.get(name)
@@ -2169,6 +2176,9 @@ class PetWindow(QWidget):
         if self.state == "sleep":
             self.wake_by_pet()
             return
+        if self._lull is not None:                # 哄睡时摸头: 快一步睡着
+            self._lull_pet()
+            return
         if self._ix.call("pet"):                  # 互动扩展接管(如: 生气时哄她)
             self.stats.inc("pets")
             return
@@ -2824,6 +2834,119 @@ class PetWindow(QWidget):
         hp = self.head_point()
         self.burst("z", 2, at=QPointF(hp.x() + 18, hp.y() - 10))
 
+    # ----- 哄她睡觉 -----
+    def lull(self):
+        """右键「😴 哄她睡觉」: 打哈欠 -> 揉眼睛、脑袋一点一点 -> 说晚安 -> 睡着(每步 LULL_STEPS 秒)。
+        这期间摸头 = 快一步睡着(说晚安时再摸一下就睡了); 戳她 = 醒了, 不高兴。
+        生气 / 闹别扭、太饿、专注计时中不肯; 插件可以用 lull_ok 不让(比如头冠被抢了)。已经睡着: 说句梦话"""
+        if self.state == "sleep":
+            self.force_sleep()
+            return
+        if self._lull is not None or not self.isVisible():
+            return
+        acts = self.activities()
+        self.note_interaction()
+        why, pool, state = None, None, None
+        if self.sulking() or self.state == "angry":
+            why, pool, state = "angry", C.LULL_ANGRY, ("angry", None)
+        elif acts & LULL_BUSY:
+            why, pool = "busy", C.LULL_BUSY
+        elif self.focusing():
+            why, pool = "focus", C.LULL_FOCUS
+        elif self.stats.hunger < LULL_HUNGRY:
+            why, pool, state = "hungry", C.LULL_HUNGRY, ("idle", "hungry")
+        elif not self._tune("lull_ok", True):
+            why, pool = "plugin", self._tune("lull_refuse_lines", C.LULL_BUSY)
+        if why is not None:
+            if state is not None and "drag" not in acts and "fling" not in acts:
+                self.set_state(state[0], 2.0, expr=state[1] if state[1] in self.frames else None)
+            self.say(self.pick_line(pool), force=True)
+            self.emit_event("lull", stage="refused", why=why)
+            return
+        self.stop_walk()
+        self.bubble.hide()
+        self._bchase = None
+        self._lull = dict(tok=None, n=0, pets=0)
+        h = datetime.now().hour
+        self.set_state("yawn", LULL_STEPS[0] + 0.4)
+        self.say(random.choice(C.LULL_START_NIGHT if (h >= 21 or h < 6) else C.LULL_START_DAY), force=True,
+                 duration=LULL_STEPS[0] + 0.2)
+        self.emit_event("lull", stage="start", memo="你在哄她睡觉")
+        self._lull_next(LULL_STEPS[0])
+
+    def _lull_next(self, sec):
+        tok = self._lull["tok"] = object()
+        QTimer.singleShot(int(sec * 1000), lambda: self._lull_step(tok))
+
+    def _lull_ok(self):
+        """还哄得下去吗: 被拖走、丢出去、转圈、吃东西、达妮卡来了、藏起来、魂飞了…… -> 不了了之"""
+        if not self.isVisible() or self._dragging or self.fling or self.edge or self.food_fx is not None:
+            return False
+        if self.danika.active() or self.spin_rem > 0 or self._soul is not None:
+            return False
+        return self.state in ("yawn", "content", "idle")
+
+    def _lull_step(self, tok):
+        L = self._lull
+        if L is None or L["tok"] is not tok:
+            return
+        if not self._lull_ok():
+            self._lull = None
+            return
+        L["n"] += 1
+        if L["n"] == 1:                                   # 揉眼睛, 脑袋一点一点
+            self.set_state("content", LULL_STEPS[1] + 0.4)
+            hp = self.head_point()
+            self.burst("z", 1, at=QPointF(hp.x() + 18, hp.y() - 10))
+            self.say(random.choice(C.LULL_DROWSY), force=True, duration=LULL_STEPS[1])
+            self._lull_next(LULL_STEPS[1])
+        elif L["n"] == 2:                                 # 说晚安
+            self.set_state("yawn", LULL_STEPS[2] + 0.4)
+            self.say(random.choice(C.LULL_NIGHT), force=True, duration=LULL_STEPS[2] + 0.8)
+            self._lull_next(LULL_STEPS[2])
+        else:
+            self._lull_asleep()
+
+    def _lull_asleep(self):
+        L, self._lull = self._lull, None
+        self.note_interaction()
+        self._yawned = False
+        self.set_state("sleep")
+        hp = self.head_point()
+        self.burst("z", 2, at=QPointF(hp.x() + 18, hp.y() - 10))
+        self.mood.add(2.0)
+        self.gain(1, "lull", quiet=True)
+        self.emit_event("lull", stage="asleep", pets=(L or {}).get("pets", 0), memo="你把她哄睡着了")
+
+    def _lull_pet(self):
+        L = self._lull
+        L["pets"] += 1
+        self.stats.inc("pets")
+        self.burst("heart", 2)
+        if L["n"] >= 2:                                   # 已经在说晚安了: 再摸一下就睡着
+            self._lull_asleep()
+            return
+        if L["pets"] == 1 or not self.bubble.isVisible():
+            self.say(random.choice(C.LULL_PET), force=True, duration=2.0)
+        self._lull_next(0.9)
+
+    def _lull_poke(self):
+        self._lull = None
+        self._yawned = False
+        self.set_state("shy", 2.4, expr="pout" if "pout" in self.frames else None)
+        self.kick(-1.4)
+        self.sfx.play("hmph")
+        self.mood.add(-1.0)
+        self.say(random.choice(C.LULL_POKE), force=True)
+        self.emit_event("lull", stage="poked", memo="她快被你哄睡着了，你戳了她一下，她不高兴")
+
+    def menu_items_all(self):
+        """右键菜单 / 托盘「互动」里会变的那几项: 本体的「哄她睡觉」(醒着时才有) + 插件的 menu_items()"""
+        core = []
+        if self.state != "sleep" and self._lull is None and self.isVisible():
+            core.append(("😴", "哄她睡觉", self.lull))
+        return core + list(self._ix.menu_items())
+
     # ----- 偷吃 -----
     def sneaking(self):
         return time.monotonic() < self._sneak_until and not self._sneak_caught
@@ -3445,6 +3568,9 @@ class PetWindow(QWidget):
             return
         self.note_interaction()
         self.emit_event("double_click")
+        if self._lull is not None:
+            self._lull_poke()
+            return
         if self._ix.call("click", True):
             return
         now = time.monotonic()
@@ -3537,6 +3663,9 @@ class PetWindow(QWidget):
         self.emit_event("click")
         if self._soul is not None:                  # 魂飞出去了: 戳一下就回来
             self._soul_back("click")
+            return
+        if self._lull is not None:                  # 快被哄睡着了被戳: 醒了, 不高兴
+            self._lull_poke()
             return
         if self._ix.call("click", False):          # 互动扩展接管(如: 究极生气时被戳)
             return
@@ -3791,6 +3920,8 @@ class PetWindow(QWidget):
             a.add("food_fx")
         if self.sulking():
             a.add("sulk")
+        if self._lull is not None:
+            a.add("lull")
         if self.spin_rem > 0 or self._spin_overspin or self._spin_posting:
             a.add("spin")
         if self.state == "dizzy" or now < self._dizzy_until:

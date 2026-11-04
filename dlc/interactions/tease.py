@@ -13,9 +13,17 @@
      10 分钟内再 Ctrl 喂她不上当; 这段时间真喂她, 她也要先眯眼确认一下才吃。心情 -2。
   4. 弹脑门: 按住她额头别动, 0.3 秒后开始蓄力(她会紧张), 松手「啪」一下 —— 蓄得越久越疼, 额头鼓起一个小包, 慢慢消。
      30 秒内弹三下, 她会捂住额头半分钟不让弹。心情 -1.5 ~ -4。要 assets/ouch.png(揉额头), 没有就借委屈那张。
+  5. 抢法杖(和头冠反着来): 按住杖头往外(离开她身子那边)一拽, 法杖到你手里(也可以菜单「🪄 抢她的法杖」), 你捏着杖身。
+     她不追: 站着伸手念咒往回叫, 每隔几秒法杖在你手里往她那边挣一下, 一次比一次猛; 离她近就被叫回去, 跑远点能撑一阵,
+     念到第六次一定回去。你拿着它左右甩(或左键点一下)= 乱施法, 魔法打到她身上(开花 / 飘起来 / 被电一下 / 下雪),
+     挥到第三下炸了: 她被炸得灰头土脸(脸上的灰慢慢掉), 法杖自己飞回她手里。右键 = 还给她(她会消点气)。
+     拿回来后 90 秒内再伸手, 她抱紧法杖不给。心情 -3, 每挥一下 -1, 炸了再 -2。
+     法杖图 assets/wand.png; 两手空空的脸 assets/nowand.png, 没有就借被拎起来那张(那张也没拿法杖)。
 达妮卡来访时(调节口 danika_script): 她脸上被画了还不知道 -> 达妮卡指出来、拿毛巾帮她擦掉, 走了以后她冲你生气;
      额头有包 -> 达妮卡问是谁弹的。
-好感: 每样每天最多扣 DAILY 次(各 -1)。推事件: doodle(stage) / tiara(stage) / fake_feed(n) / flick(power), 都带 memo。
+好感: 每样每天最多扣 DAILY 次(各 -1)。推事件: doodle(stage) / tiara(stage) / fake_feed(n) / flick(power) /
+wand(stage: stolen / tug(n, ok) / cast(kind, n) / back(how: summon / boom / given / silent)), 都带 memo。
+她被哄着睡觉时(本体「哄她睡觉」)这些都不开; 头冠 / 法杖还在你手里时她不肯被哄(调节口 lull_ok)。
 记在 <数据目录>/tease.json(每天扣过几次)。priority = -2: 别的插件先接; 画在立绘上的东西(涂鸦、小包)最后画, 盖在最上面。
 只用公开接口(docs/接口规范.md)。不想要就删掉这个文件。
 """
@@ -24,6 +32,7 @@ import math
 import os
 import random
 import time
+from collections import deque
 from datetime import date
 from pathlib import Path
 
@@ -35,7 +44,7 @@ from PySide6.QtWidgets import QToolTip, QWidget
 from stats import data_dir
 
 ASSETS = Path(__file__).resolve().parents[2] / "assets"
-DAILY = {"doodle": 2, "tiara": 2, "fake": 2, "flick": 2}       # 每天最多因为这一样扣几次好感
+DAILY = {"doodle": 2, "tiara": 2, "fake": 2, "flick": 2, "wand": 2}   # 每天最多因为这一样扣几次好感
 
 # ----- 1. 在脸上画画 -----
 INK = QColor(34, 34, 46)
@@ -72,6 +81,49 @@ TIARA_PICKUP = ["(捡起来,拍拍灰)……哼。", "找到了!……下次不�
 TIARA_GUARDED = ["不许碰!(护住头冠)", "哼,头冠不给你!"]
 STATUS_TIARA = "捂着脑袋追头冠……"
 STATUS_TIARA_SAD = "蹲在地上,眼巴巴地看着头冠……"
+TIARA_NO_SLEEP = ["头冠还没还我呢!……睡什么睡!", "先把头冠还我!"]
+
+# ----- 5. 抢法杖 -----
+WAND_W = 0.30                        # 法杖(assets/wand.png)的宽 = 立绘宽的多少(和她手里拿着的一样大)
+WAND_GRIP = (0.80, 0.78)             # 你捏着法杖图的哪一点(比例): 杖身下半截
+WAND_TIP = (0.51, 0.26)              # 杖头宝石(比例): 发光、闪的地方
+_WH_IDLE = ((0.11, 0.33), (0.45, 0.73))
+_WH_UP = ((0.02, 0.25), (0.32, 0.60))   # 举起来的(开心、挥手、生气……)
+_WH_MID = ((0.07, 0.28), (0.36, 0.62))  # 吓一跳、转晕
+WAND_HEAD = {"happy": _WH_UP, "wave": _WH_UP, "cheer": _WH_UP, "stretch": _WH_UP, "angry": _WH_UP, "love": _WH_UP,
+             "surprised": _WH_MID, "dizzy": _WH_MID, "hungry": ((0.10, 0.31), (0.69, 0.97)),
+             "yawn": ((0.17, 0.36), (0.52, 0.77))}   # 各张立绘里杖头在哪(宽、高的比例); 按住这儿往外拽才算抢
+WAND_HAND = (0.21, 0.60)             # 叫回来时法杖飞到哪(立绘比例)
+WAND_TUG_FIRST = 2.0                 # 抢走后多久第一次念咒
+WAND_TUG_GAP = 3.6                   # 两次念咒之间
+WAND_TUG_SEC = 1.3                   # 一次念咒往回拽多久
+WAND_TUG_K = (0.3, 0.45, 0.6, 0.78, 0.9, 1.0)   # 第几次念咒把法杖往她那儿拽多少(1 = 一定拽回去)
+WAND_REACH = 0.55                    # 法杖被拽到离她的手这么近(立绘宽的倍数)就回到她手里
+WAND_RET_SEC = 0.4                   # 飞回她手里要多久
+WAND_CAST_COOL = 1.3                 # 乱施法的间隔
+WAND_SHAKE_PX = 18                   # 左右甩: 每一段至少挪这么多像素, 0.7 秒内来回 3 次算挥一下
+WAND_BOOM_AT = 3                     # 挥到第几下炸
+WAND_GUARD = 90.0                    # 拿回来以后这么久内再伸手, 她抱紧不给
+WAND_SOOT_SEC = 25.0                 # 炸完脸上的灰多久掉干净
+WAND_SPELLS = ("flower", "float", "zap", "snow")
+WAND_STOLEN = ["啊!我的法杖!!", "法、法杖还我!!", "那个不能乱拿的!!"]
+WAND_SUMMON = ["法杖,回来!", "……以薇斯纳之名——回来!", "回——来——!"]
+WAND_TUG_FAIL = ["……唔,差一点!", "你、你别攥那么紧!", "可恶……拉不过来……"]
+WAND_CHASE = ["先把法杖还我!", "不许拿着它乱跑!"]
+WAND_CAST = {"flower": ["诶?!……怎么开花了?!", "别、别乱挥!!"], "float": ["哇啊?!……放我下来!!", "飘、飘起来了?!"],
+             "zap": ["呀!……麻、麻了……", "电、电到我了!!"], "snow": ["阿嚏!……好冷!!", "怎么下雪了?!……是你干的吧!"]}
+WAND_BOOM = ["……咳、咳……法杖不是这么用的啦!!", "……(头发都炸起来了)……你、你!!"]
+WAND_BOOM_MAD = ["……哼!下次再乱挥,我就把你变成青蛙!", "脸上全是灰……都怪你!"]
+WAND_BACK_SUMMON = ["哼!回来了!……果然还是听我的。", "抓到了!……不许再碰!"]
+WAND_GIVEN = ["……哼,算你识相。", "(一把抱住)……不许再拿了!"]
+WAND_GUARDED = ["不许碰法杖!(抱紧)", "哼,法杖不给你!"]
+WAND_NO_SLEEP = ["法杖还没还我呢,睡不着!", "先把法杖还我!"]
+STATUS_WAND = "两手空空地伸着手,念念有词地想把法杖叫回来……"
+STATUS_WAND_TUG = "伸长了手念着咒,法杖在你手里一个劲儿往她那边挣……"
+STATUS_WAND_HIT = "被乱飞的魔法弄得手忙脚乱……"
+STATUS_WAND_BOOMING = "法杖在你手里滋滋地冒火星……"
+STATUS_SOOT = "头发炸得乱蓬蓬的,脸上还沾着灰……"
+SOOT_SPOTS = ((0.37, 0.585, 0.045), (0.565, 0.595, 0.042), (0.46, 0.40, 0.034), (0.62, 0.35, 0.030))  # 灰: 两颊 + 刘海(x, y, 半径)
 
 # ----- 3. 假装喂 -----
 FAKE_WINDOW = 1800.0                 # 这段时间里骗了几次
@@ -96,7 +148,7 @@ FLICK_GUARDED = ["不许再弹了!(捂住额头)", "哼,额头不给你!"]
 FLICK_CANCEL = ["……呼?不弹了?", "……吓死我了。"]
 STATUS_BUMP = "额头上鼓着个小包,时不时摸一下……"
 
-BUSY_HER = {"hidden", "drag", "fling", "throw", "spin", "danika", "food_fx", "edge", "frozen", "sick"}
+BUSY_HER = {"hidden", "drag", "fling", "throw", "spin", "danika", "food_fx", "edge", "frozen", "sick", "lull"}
 
 # ----- 达妮卡来访时: 脸上被画了 / 额头有包 -----
 DANIKA_DOODLE = [("danika", "……薇斯纳大人。您脸上。"), ("vesna", "脸上?……有什么吗?"),
@@ -172,6 +224,85 @@ class TiaraWin(QWidget):
         e.accept()
 
 
+class WandWin(QWidget):
+    """被抢走的法杖: 你捏着杖身(grip 那一点跟着鼠标); 左键 = 挥一下(乱施法), 右键 = 还给她。
+    窗口比法杖大一圈, 转起来、发光不会被裁掉"""
+    PAD = 0.45
+
+    def __init__(self, plug, pm, w):
+        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus)
+        self.plug, self.pm = plug, pm
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+        self.ww = float(w)
+        self.wh = w * pm.height() / max(1, pm.width())
+        pad = self.PAD * max(self.ww, self.wh)
+        self.resize(int(self.ww + pad * 2), int(self.wh + pad * 2))
+        self.ox, self.oy = (self.width() - self.ww) / 2, (self.height() - self.wh) / 2
+        self.setCursor(Qt.ClosedHandCursor)
+        self.rot = 0.0
+        self.glow = 0.0                      # 她念咒往回叫: 杖头一圈青光(0-1)
+        self.flash = 0.0                     # 你挥了一下: 杖头一闪(0-1)
+
+    def grip(self):
+        return QPointF(self.ox + self.ww * WAND_GRIP[0], self.oy + self.wh * WAND_GRIP[1])
+
+    def tip(self):
+        return QPointF(self.ox + self.ww * WAND_TIP[0], self.oy + self.wh * WAND_TIP[1])
+
+    def grip_at(self, g):
+        gp = self.grip()
+        self.move(int(round(g.x() - gp.x())), int(round(g.y() - gp.y())))
+
+    def grip_global(self):
+        return QPointF(self.x(), self.y()) + self.grip()
+
+    def tip_global(self):
+        return QPointF(self.x(), self.y()) + self.tip()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        g = self.grip()
+        p.translate(g)
+        p.rotate(self.rot)                   # 绕捏着的那一点转
+        p.translate(-g)
+        h = self.tip()
+        if self.glow > 0.01:
+            r = self.ww * (0.5 + 0.12 * self.glow)
+            gr = QRadialGradient(h, r)
+            gr.setColorAt(0, QColor(150, 240, 235, int(180 * self.glow)))
+            gr.setColorAt(1, QColor(150, 240, 235, 0))
+            p.setPen(Qt.NoPen)
+            p.setBrush(gr)
+            p.drawEllipse(h, r, r)
+        p.drawPixmap(QRectF(self.ox, self.oy, self.ww, self.wh), self.pm, QRectF(self.pm.rect()))
+        if self.flash > 0.01:                # 星芒
+            a = int(255 * self.flash)
+            ln = self.ww * (0.3 + 0.5 * (1.0 - self.flash))
+            gr = QRadialGradient(h, ln * 0.7)
+            gr.setColorAt(0, QColor(255, 255, 235, a))
+            gr.setColorAt(1, QColor(255, 220, 240, 0))
+            p.setPen(Qt.NoPen)
+            p.setBrush(gr)
+            p.drawEllipse(h, ln * 0.7, ln * 0.7)
+            p.setPen(QPen(QColor(255, 248, 200, a), max(2.0, self.ww * 0.04), Qt.SolidLine, Qt.RoundCap))
+            for ang in (0, 45, 90, 135):
+                dx, dy = math.cos(math.radians(ang)) * ln, math.sin(math.radians(ang)) * ln
+                k = 1.0 if ang % 90 == 0 else 0.6
+                p.drawLine(QPointF(h.x() - dx * k, h.y() - dy * k), QPointF(h.x() + dx * k, h.y() + dy * k))
+        p.end()
+
+    def mousePressEvent(self, e):
+        if e.button() in (Qt.LeftButton, Qt.RightButton):
+            self.plug.wand_clicked(e.button() == Qt.RightButton)
+        e.accept()
+
+    def contextMenuEvent(self, e):
+        e.accept()
+
+
 class Tease:
     priority = -2
 
@@ -198,6 +329,15 @@ class Tease:
             self.tiara_pm = None
         self.tia = None
         self.tia_guard = 0.0
+        # 5. 法杖
+        wp = ASSETS / "wand.png"
+        self.wand_pm = QPixmap(str(wp)) if wp.is_file() else None
+        if self.wand_pm is not None and self.wand_pm.isNull():
+            self.wand_pm = None
+        self.wand = None                     # dict(mode held/follow, win, tug, tugs, casts, ret……)
+        self.wand_guard = 0.0
+        self.wand_hist = deque(maxlen=160)   # (t, 鼠标 x): 看你是不是在左右甩
+        self.soot = 0.0                      # 炸完脸上的灰(1 -> 0)
         # 3. 假装喂
         self.fakes, self.distrust_until = [], 0.0
         # 4. 弹脑门
@@ -281,6 +421,8 @@ class Tease:
             return "doodle"
         if self.tia is not None:
             return "tiara"
+        if self.wand is not None:
+            return "wand"
         if self.charge is not None:
             return "flick"
         return None
@@ -290,6 +432,17 @@ class Tease:
             return STATUS_DRAWING
         if self.tia is not None:
             return STATUS_TIARA_SAD if self.tia.get("sad") else STATUS_TIARA
+        if self.wand is not None:
+            wd = self.wand
+            if wd.get("boom"):
+                return STATUS_WAND_BOOMING
+            if wd["tug"] is not None:
+                return STATUS_WAND_TUG
+            if time.monotonic() - wd.get("hit_at", -1e9) < 2.5:
+                return STATUS_WAND_HIT
+            return STATUS_WAND
+        if self.soot > 0.3 and self.pet.state != "sleep":
+            return STATUS_SOOT
         if self.doodle == "wiping":
             return STATUS_WIPING
         if self.doodle == "wearing":
@@ -301,6 +454,8 @@ class Tease:
     def expr(self, key, state):
         if self.tia is not None and state != "sleep" and self._has_notiara():
             return "notiara"
+        if self.wand is not None and state != "sleep":
+            return "nowand" if "nowand" in getattr(self.pet, "frames", {}) else "held"
         return None
 
     def _has_notiara(self):
@@ -318,11 +473,18 @@ class Tease:
             items.append(("🖌", "画花脸", self.start_doodle))
         if self.doodle == "wearing" and p.state != "sleep":
             items.append(("🪞", "给她照照镜子", self.mirror))
-        if self.tiara_ok() and self.tia is None and p.state != "sleep":
+        if self.tiara_ok() and self.tia is None and self.wand is None and p.state != "sleep":
             items.append(("👑", "抢她的头冠", self.steal_from_menu))
+        if self.wand_ok() and self.wand is None and self.tia is None and p.state != "sleep":
+            items.append(("🪄", "抢她的法杖", self.steal_wand_from_menu))
         return items
 
     def tune(self, name, value, ctx):
+        if name == "lull_ok":                                     # 头冠 / 法杖还在你手里: 不肯被哄睡
+            busy = self.wand is not None or self.tia is not None or self.drawing or self.charge is not None
+            return False if busy else None
+        if name == "lull_refuse_lines":
+            return WAND_NO_SLEEP if self.wand is not None else TIARA_NO_SLEEP if self.tia is not None else None
         if name != "danika_script" or value is not None:          # 别的插件(生病……)已经换了就不抢
             return None
         p = self.pet
@@ -387,8 +549,8 @@ class Tease:
 
     def on_pet(self):
         p = self.pet
-        if self.tia is not None:
-            return True                                   # 忙着追头冠, 顾不上
+        if self.tia is not None or self.wand is not None:
+            return True                                   # 忙着追头冠 / 叫法杖, 顾不上
         if time.monotonic() < self.grudge_until and p.state != "sleep":
             p.set_state("angry", 1.6)
             p.kick(-1.2)
@@ -401,11 +563,15 @@ class Tease:
             if not self.pet.bubble.isVisible():
                 self._say("chase", TIARA_CHASE, 1.6)
             return True
+        if self.wand is not None:
+            if not self.pet.bubble.isVisible():
+                self._say("wchase", WAND_CHASE, 1.6)
+            return True
         return False
 
     def on_mouse_press(self, e):
         p = self.pet
-        if e.button() != Qt.LeftButton or self.drawing or self.tia is not None:
+        if e.button() != Qt.LeftButton or self.drawing or self.tia is not None or self.wand is not None:
             return False
         nx, ny = self._norm(e.position())
         if self._in(FLICK_ZONE, nx, ny) and self._awake_free() and not p.sulking():
@@ -419,7 +585,10 @@ class Tease:
 
     def on_drag_begin(self, pos, delta):
         p = self.pet
-        if not self.tiara_ok() or self.tia is not None or self.drawing or not self._awake_free():
+        if self._wand_grab(pos, delta):
+            return True
+        if (self.wand is not None or not self.tiara_ok() or self.tia is not None or self.drawing
+                or not self._awake_free()):
             return False
         nx, ny = self._norm(pos)
         if not self._in(TIARA_ZONE, nx, ny) or delta.y() >= 0 or -delta.y() < abs(delta.x()) * 0.8:
@@ -479,6 +648,10 @@ class Tease:
                     self.doodle, self.ink = "fresh", 1.0
                 self._cache.clear()
             return
+        if self.wand is not None:                             # 捏着法杖时右键 = 还给她
+            if e.button() == Qt.RightButton:
+                self.wand_clicked(True)
+            return
         if self.charge is None and self.tia is None:
             self.pet.release_mouse(self)
 
@@ -525,6 +698,11 @@ class Tease:
             return
         if self.tia is not None and self.tia["mode"] == "held":
             self._drop()
+            return
+        if self.wand is not None:                             # 松手: 法杖还捏在手里, 跟着鼠标
+            if self.wand["mode"] == "held" and e.button() == Qt.LeftButton:
+                self.wand["mode"] = "follow"
+                self.pet.release_mouse(self)
             return
         self.pet.release_mouse(self)
 
@@ -608,7 +786,7 @@ class Tease:
 
     # ----- 2. 抢头冠 -----
     def steal_from_menu(self):
-        if self.tiara_ok() and self.tia is None and self._awake_free():
+        if self.tiara_ok() and self.tia is None and self.wand is None and self._awake_free():
             self._steal(held=False)
 
     def _steal(self, held):
@@ -747,6 +925,276 @@ class Tease:
             p.burst("drop", 2, at=p.head_point() + QPointF(0, p.char_h * 0.2))
             self._say("sad", TIARA_SAD, 3.0, None)
 
+    # ----- 5. 抢法杖 -----
+    def wand_ok(self):
+        return self.wand_pm is not None
+
+    def _can_steal_wand(self):
+        return (self.wand_ok() and self.wand is None and self.tia is None and not self.drawing and self.charge is None
+                and self._awake_free())
+
+    def _hand(self):
+        """她手里平时拿法杖的地方(屏幕坐标)"""
+        return self._glob(*WAND_HAND)
+
+    def steal_wand_from_menu(self):
+        if self._can_steal_wand():
+            self._steal_wand(held=False)
+
+    def _wand_grab(self, pos, delta):
+        """按住杖头往外(离开她身子那边, 立绘里是往左)拽 -> 抢法杖; 往别的方向拖还是照常把她拎起来"""
+        if not self._can_steal_wand():
+            return False
+        nx, ny = self._norm(pos)
+        key = self.pet.stand_key() if hasattr(self.pet, "stand_key") else "idle"
+        if not self._in(WAND_HEAD.get(key, _WH_IDLE), nx, ny):
+            return False
+        out = -delta.x() if getattr(self.pet, "face", 1.0) >= 0 else delta.x()
+        if out <= 0 or out < abs(delta.y()) * 0.6:
+            return False
+        if time.monotonic() < self.wand_guard:                # 抱紧了: 照常被拎起来
+            QTimer.singleShot(0, lambda: self._say("wguard", WAND_GUARDED, 2.0))
+            return False
+        self.fpend = None
+        self._steal_wand(held=True)
+        return True
+
+    def _steal_wand(self, held):
+        p = self.pet
+        p.note_interaction()
+        p.stop_walk()
+        w = WandWin(self, self.wand_pm, max(36.0, p.char_w * WAND_W))
+        if held:
+            p.capture_mouse(self)
+        w.grip_at(QPointF(QCursor.pos()))
+        w.show()
+        now = time.monotonic()
+        self.wand = dict(mode="held" if held else "follow", win=w, t0=now, next_tug=now + WAND_TUG_FIRST, tugs=0,
+                         tug=None, casts=0, cast_at=-1e9, hit_at=-1e9, last=None, boom=None, ret=None, spark=0.0)
+        self.wand_hist.clear()
+        p.set_state("surprised", 1.0)
+        p.burst("excl", 1)
+        p.sfx.play("huh")
+        self._say("wstolen", WAND_STOLEN, 2.0)
+        p.mood.add(-3.0)
+        self._lose("wand")
+        p.emit_event("wand", stage="stolen", memo="你把她的法杖抢走了，她两手空空，念咒想把它叫回来（互动）")
+
+    def wand_clicked(self, right):
+        """点手里的法杖: 左键 = 挥一下, 右键 = 还给她"""
+        wd = self.wand
+        if wd is None or wd["ret"] is not None or wd["boom"] is not None:
+            return
+        if right:
+            self._wand_return("given")
+        else:
+            self._wand_cast()
+
+    def _wand_cast(self):
+        wd, p = self.wand, self.pet
+        t = time.monotonic()
+        if wd is None or wd["ret"] is not None or wd["boom"] is not None or t - wd["cast_at"] < WAND_CAST_COOL:
+            return
+        wd["cast_at"] = t
+        wd["casts"] += 1
+        wd["win"].flash = 1.0
+        p.sfx.play("sparkle")
+        p.note_interaction()
+        if wd["casts"] >= WAND_BOOM_AT:                         # 第三下: 杖在你手里抖, 然后炸
+            wd["boom"] = t + 0.6
+            p.emit_event("wand", stage="cast", kind="boom", n=wd["casts"],
+                         memo="你又拿她的法杖乱挥，法杖开始冒火星（互动）")
+            return
+        kind = random.choice([k for k in WAND_SPELLS if k != wd["last"]])
+        wd["last"] = kind
+        QTimer.singleShot(260, lambda: self.wand is wd and wd["ret"] is None and self._wand_hit(kind))
+        p.emit_event("wand", stage="cast", kind=kind, n=wd["casts"],
+                     memo="你拿她的法杖乱挥了一下，魔法打到了她身上（互动）")
+
+    def _wand_hit(self, kind):
+        """乱施的魔法打到她身上"""
+        p, wd = self.pet, self.wand
+        wd["hit_at"] = time.monotonic()
+        hp = p.head_point()
+        p.stop_walk()
+        p.mood.add(-1.0)
+        if kind == "flower":
+            p.set_state("surprised", 1.4)
+            p.burst("heart", 5, at=hp)
+            p.burst("sparkle", 6, at=hp)
+        elif kind == "float":
+            p.do_jump(True)
+            p.burst("sparkle", 4, at=p.foot_point())
+        elif kind == "zap":
+            p.set_state("surprised", 1.4)
+            p.kick(-2.0)
+            p.burst("emoji", 1, at=QPointF(hp.x(), hp.y() - 8), bias=(0, -40), text="⚡")
+            p.burst("sweat", 2)
+        else:
+            p.set_state("surprised", 1.4)
+            p.burst("snow", 10, at=QPointF(hp.x(), hp.y() - p.char_h * 0.12), bias=(0, 60))
+        self._say("wcast_" + kind, WAND_CAST[kind], 2.0)
+
+    def _wand_boom(self):
+        p = self.pet
+        hp = p.head_point()
+        p.burst("puff", 12, at=hp, bias=(0, 0))
+        p.burst("star", 6, at=hp)
+        p.sfx.play("bonk")
+        self.soot = 1.0
+        self._cache.clear()
+        p.mood.add(-2.0)
+        self._wand_return("boom")
+
+    def _wand_return(self, how):
+        """法杖飞回她手里(叫回来 / 炸了 / 你还给她), 飞到了再 _wand_back"""
+        wd = self.wand
+        if wd is None or wd["ret"] is not None:
+            return
+        self.pet.release_mouse(self)
+        w = wd["win"]
+        wd["ret"] = dict(how=how, t0=time.monotonic(), a=w.grip_global())
+        wd["tug"] = None
+        w.glow = 0.0
+
+    def _wand_back(self, how):
+        p = self.pet
+        wd, self.wand = self.wand, None
+        if wd is None:
+            return
+        p.release_mouse(self)
+        try:
+            wd["win"].hide()
+            wd["win"].deleteLater()
+        except Exception:
+            pass
+        self.wand_guard = time.monotonic() + WAND_GUARD
+        if how == "silent":
+            return
+        p.stop_walk()
+        if how == "summon":
+            p.set_state("happy", 2.2)
+            p.burst("sparkle", 6, at=self._hand())
+            self._say("wback", WAND_BACK_SUMMON, 2.6, "happy")
+            memo = "她念咒把法杖叫回了手里"
+        elif how == "given":
+            p.set_state("content", 2.2, expr="smug" if "smug" in getattr(p, "frames", {}) else None)
+            p.burst("sparkle", 3, at=self._hand())
+            p.mood.add(1.5)
+            self._say("wgiven", WAND_GIVEN, 2.6, None)
+            memo = "你把法杖还给了她"
+        else:
+            p.set_state("dizzy", 2.4)
+            self._say("wboom", WAND_BOOM, 2.6)
+            QTimer.singleShot(2600, self._boom_mad)
+            memo = "你拿她的法杖乱挥，魔法炸了，她被炸得灰头土脸，法杖自己飞回了她手里"
+        p.emit_event("wand", stage="back", how=how, memo=memo)
+
+    def _boom_mad(self):
+        p = self.pet
+        if p.state == "sleep" or not p.isVisible() or self.wand is not None:
+            return
+        p.set_state("angry", 2.6)
+        p.burst("anger", 2, at=p.head_point() + QPointF(p.char_w * 0.25, -10))
+        p.sfx.play("hmph")
+        self._say("wmad", WAND_BOOM_MAD, 2.8)
+
+    def _wand_shook(self, t, x):
+        """鼠标左右来回甩: 0.7 秒内来回 3 次(每段至少 WAND_SHAKE_PX)"""
+        h = self.wand_hist
+        h.append((t, x))
+        while h and t - h[0][0] > 0.7:
+            h.popleft()
+        turns, last, anchor = 0, 0, None
+        for _, xx in h:
+            if anchor is None:
+                anchor = xx
+                continue
+            d = xx - anchor
+            if abs(d) >= WAND_SHAKE_PX:
+                dirn = 1 if d > 0 else -1
+                if last and dirn != last:
+                    turns += 1
+                last, anchor = dirn, xx
+        if turns >= 3:
+            h.clear()
+            return True
+        return False
+
+    def _wand_step(self, t, dt):
+        wd, p = self.wand, self.pet
+        if wd is None:
+            if self.soot > 0.0:
+                old = round(self.soot, 2)
+                self.soot = max(0.0, self.soot - dt / WAND_SOOT_SEC)
+                if round(self.soot, 2) != old:
+                    self._cache.clear()
+            return
+        if not p.isVisible() or p.state == "sleep":
+            self._wand_back("silent")
+            return
+        w = wd["win"]
+        w.flash = max(0.0, w.flash - dt * 2.4)
+        r = wd["ret"]
+        if r is not None:                                        # 飞回她手里
+            u = min(1.0, (t - r["t0"]) / WAND_RET_SEC)
+            e = u * u * (3 - 2 * u)
+            hand = self._hand()
+            w.grip_at(r["a"] + (hand - r["a"]) * e)
+            w.rot = -40.0 * math.sin(math.pi * u)
+            w.update()
+            if u >= 1.0:
+                self._wand_back(r["how"])
+            return
+        cur = QPointF(QCursor.pos())
+        if wd["boom"] is not None:                               # 要炸了: 在你手里抖
+            w.rot = 14.0 * math.sin(t * 55.0)
+            w.flash = max(w.flash, 0.5 + 0.5 * math.sin(t * 30.0))
+            w.grip_at(cur)
+            w.update()
+            if t >= wd["boom"]:
+                self._wand_boom()
+            return
+        target = cur
+        tug = wd["tug"]
+        if tug is not None:                                      # 她念咒往回叫: 法杖往她那儿挣
+            u = (t - tug["t0"]) / WAND_TUG_SEC
+            if u >= 1.0:
+                wd["tug"] = None
+                w.glow = 0.0
+                self._say("wfail", WAND_TUG_FAIL, 1.8)
+                p.emit_event("wand", stage="tug", n=wd["tugs"], ok=False)
+            else:
+                ramp = min(1.0, u / 0.6)
+                pull = tug["k"] * ramp * ramp * (3 - 2 * ramp)
+                hand = self._hand()
+                target = cur + (hand - cur) * pull
+                w.glow = min(1.0, u * 3.0)
+                w.rot = 6.0 * math.sin(t * 38.0)
+                if t >= wd["spark"]:
+                    wd["spark"] = t + 0.25
+                    p.burst("sparkle", 1, at=hand)
+                d = target - hand
+                if math.hypot(d.x(), d.y()) <= p.char_w * WAND_REACH:
+                    w.grip_at(target)
+                    p.emit_event("wand", stage="tug", n=wd["tugs"], ok=True)
+                    self._wand_return("summon")
+                    return
+        else:
+            w.rot *= 0.8
+        w.grip_at(target)
+        w.update()
+        if tug is None and t >= wd["next_tug"]:                 # 再念一次咒
+            wd["tug"] = dict(t0=t, k=WAND_TUG_K[min(wd["tugs"], len(WAND_TUG_K) - 1)])
+            wd["tugs"] += 1
+            wd["next_tug"] = t + WAND_TUG_SEC + WAND_TUG_GAP
+            p.stop_walk()
+            p.set_state("wave", WAND_TUG_SEC + 0.3)
+            p.sfx.play("sparkle")
+            self._say("wsummon", WAND_SUMMON, WAND_TUG_SEC + 0.5)
+        if self._wand_shook(t, cur.x()):
+            self._wand_cast()
+
     # ----- 3. 假装喂 -----
     def on_feed(self, food):
         p = self.pet
@@ -864,10 +1312,10 @@ class Tease:
     # ----- 画在立绘上: 涂鸦、小包、蓄力圈 -----
     def paint(self, key, pm, t):
         draw_ink = bool(self.strokes) and self.ink > 0.01
-        if not draw_ink and self.bump <= 0.01 and self.charge is None:
+        if not draw_ink and self.bump <= 0.01 and self.charge is None and self.soot <= 0.01:
             return None
         ck = (pm.cacheKey(), sum(len(s) for s in self.strokes), round(self.ink, 2), round(self.bump, 2),
-              None if self.charge is None else int((t - self.charge["t0"]) * 12))
+              None if self.charge is None else int((t - self.charge["t0"]) * 12), round(self.soot, 2))
         out = self._cache.get(ck)
         if out is not None:
             return out, 0.0
@@ -891,6 +1339,19 @@ class Tease:
             q.drawEllipse(QPointF(bx * w, by * h), r, r * 0.85)
             q.setBrush(QColor(255, 255, 255, int(170 * a)))
             q.drawEllipse(QPointF(bx * w - r * 0.3, by * h - r * 0.3), r * 0.22, r * 0.16)
+        if self.soot > 0.01:                                   # 炸完脸上的灰
+            a = min(1.0, self.soot * 1.3)
+            q.setPen(Qt.NoPen)
+            for i, (sx, sy, sr) in enumerate(SOOT_SPOTS):
+                for dx, dy, k in ((0.0, 0.0, 1.0), (0.6, -0.35, 0.55), (-0.5, 0.4, 0.45)):
+                    c = QPointF((sx + sr * dx) * w, (sy + sr * dy) * h)
+                    rr = sr * k * w
+                    g = QRadialGradient(c, rr)
+                    g.setColorAt(0, QColor(72, 66, 74, int(150 * a)))
+                    g.setColorAt(0.6, QColor(92, 86, 94, int(95 * a)))
+                    g.setColorAt(1, QColor(110, 104, 110, 0))
+                    q.setBrush(g)
+                    q.drawEllipse(c, rr, rr * 0.8)
         if draw_ink:
             col = QColor(INK)
             col.setAlphaF(0.92 * self.ink)
@@ -929,6 +1390,7 @@ class Tease:
         self._doodle_step(t)
         self._danika_step(t)
         self._tiara_step(t, dt)
+        self._wand_step(t, dt)
         self._flick_step(t, dt)
 
 
