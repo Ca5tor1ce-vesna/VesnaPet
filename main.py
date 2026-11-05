@@ -66,6 +66,9 @@ SOUL_W = 0.36                   # 魂的宽 = 立绘宽的多少
 SOUL_ALPHA = 0.85
 SOUL_PULL = 0.75                # 揪魂: 最多扯出去多远(立绘宽的倍数); 鼠标拖得再远魂也只到这么远
 SOUL_SNAP = 1.6                 # 鼠标拖出去超过这么远(立绘宽的倍数) -> 魂被扯回身体里, 她疼醒了
+SOUL_SPIN_STEP = 0.75           # 魂在外面时, 滚轮一格把魂再送出去多远(立绘宽的倍数); 身子不转
+SOUL_SPIN_MAX = 2.2             # 送到这么远: 她倒下, 魂掉在旁边, 要抓住魂才起来
+SOUL_FALL_SEC = 0.7             # 倒下 / 魂落地要多久
 HUNGRY_FACE = 25                # 饱腹低于这个, 站着发呆时换成「饿了」那张
 FEED_REACTIONS = ("fav", "like", "ok", "dislike", "weird")     # 插件接管吃的反应时, feed 事件里能记成的档
 
@@ -915,6 +918,10 @@ class PetWindow(QWidget):
         return p
 
     def contextMenuEvent(self, e):
+        s = self._soul
+        if self._soul_down() and not (s and s.get("menu")):   # 魂掉在旁边: 不弹菜单, 先去抓住魂
+            e.accept()                                         # 生病飘走的那次除外: 右键还是送医院
+            return
         if self._capture is not None:            # 插件接管鼠标时不弹菜单(右键交给插件)
             e.accept()
             return
@@ -1292,7 +1299,7 @@ class PetWindow(QWidget):
     def feed(self, key, ask=True):
         """喂她 key 这样吃的。ask=False: 不先问插件的 on_feed(插件自己演完前戏再真的喂时用)"""
         f = C.food_by_key(key)
-        if f is None:
+        if f is None or self._soul_down():
             return
         if ask and self._ix.call("feed", dict(f)):     # 插件接管这次投喂(比如假装喂她)
             self.note_interaction()
@@ -1762,7 +1769,7 @@ class PetWindow(QWidget):
 
     # ----- 散步 -----
     def start_walk(self, target: QPointF = None, kind="stroll", speed=None):
-        if self.edge or self._dragging or self.fling or not self.isVisible():
+        if self.edge or self._dragging or self.fling or not self.isVisible() or self._soul_down():
             return False
         if target is None:
             vis = self._normal_visible_rect()
@@ -2169,6 +2176,8 @@ class PetWindow(QWidget):
         self.burst("sparkle", 8)
 
     def pet(self):
+        if self._soul_down():
+            return
         self.note_interaction()
         self.emit_event("pet", sleeping=self.state == "sleep", sulking=self.sulking())
         self._pet_cool = time.monotonic() + 2.5
@@ -2536,6 +2545,8 @@ class PetWindow(QWidget):
         """换表情; duration 秒后回 idle(闹别扭时回 angry)。why: 从睡着换走时, wake 事件里记的醒来原因。
         expr: 这段时间画哪张脸(FACES 里的名字, 如 set_state("angry", 2.8, expr="yuck")); 状态本身照旧,
         没那张图就画状态的图。下一次 set_state 就清掉"""
+        if self._soul_down() and not getattr(self, "_soul_let", False):
+            return
         if state not in STATES:
             raise ValueError(state)
         if expr is not None and expr not in self.frames:
@@ -2566,7 +2577,7 @@ class PetWindow(QWidget):
         self.update()
 
     def _revert_to_idle(self):
-        if self._dragging or self.fling:
+        if self._dragging or self.fling or self._soul_down():
             return
         self.set_state("angry" if self.sulking() else "idle")
 
@@ -2941,7 +2952,7 @@ class PetWindow(QWidget):
         self.emit_event("lull", stage="poked", memo="她快被你哄睡着了，你戳了她一下，她不高兴")
 
     def menu_items_all(self):
-        """右键菜单 / 托盘「互动」里会变的那几项: 本体的「哄她睡觉」(醒着时才有) + 插件的 menu_items()"""
+        """右键菜单 / 托盘「互动」里会变的那几项: 本体的「哄她睡觉」(醒着、没晕着时才有) + 插件的 menu_items()"""
         core = []
         if self.state not in ("sleep", "dizzy") and self._lull is None and self.isVisible():   # 晕着(被打晕)时也不列
             core.append(("😴", "哄她睡觉", self.lull))
@@ -3432,6 +3443,13 @@ class PetWindow(QWidget):
         super().enterEvent(e)
 
     def mousePressEvent(self, e):
+        if self._soul_down():                     # 倒下等抓魂: 不拖、不交给插件; 点一下只提醒
+            if e.button() == Qt.LeftButton:
+                self._press = e.globalPosition().toPoint()
+                self._win_start = self.pos()
+                self._dragging = False
+            e.accept()
+            return
         if self._capture is not None:            # 插件接管了鼠标(比如在她脸上画画)
             self._captured("press", e)
             e.accept()
@@ -3460,6 +3478,8 @@ class PetWindow(QWidget):
             e.accept()
 
     def mouseMoveEvent(self, e):
+        if self._soul_down():
+            return
         if self._capture is not None:
             self._captured("move", e)
             return
@@ -3516,6 +3536,13 @@ class PetWindow(QWidget):
             self.pet()
 
     def mouseReleaseEvent(self, e):
+        if self._soul_down():
+            self._press = None
+            self._dragging = False
+            self.setCursor(Qt.OpenHandCursor)
+            if e.button() == Qt.LeftButton:
+                self.on_click()
+            return
         if self._capture is not None:
             self._captured("release", e)
             return
@@ -3561,6 +3588,8 @@ class PetWindow(QWidget):
             self.on_click()
 
     def mouseDoubleClickEvent(self, e):
+        if self._soul_down():
+            return
         if self._capture is not None:
             self._captured("press", e)
             return
@@ -3593,6 +3622,9 @@ class PetWindow(QWidget):
         if self._capture is not None:
             return
         try:
+            if self._soul_down():
+                e.accept()
+                return
             d = e.angleDelta()
             dy = d.y() or d.x()
             if not dy:
@@ -3618,6 +3650,9 @@ class PetWindow(QWidget):
                 return
             for _ in range(notches):
                 self._wheel_hist.append(now)
+            if self._soul is not None and self._soul.get("back_t0") is None:
+                self._soul_spin_away(notches)          # 魂在外面: 身子不转, 魂越转越远
+                return
             if self.fling or self._dragging:
                 return
             if self.sulking():
@@ -3661,7 +3696,14 @@ class PetWindow(QWidget):
     def on_click(self):
         now = time.monotonic()
         self.emit_event("click")
-        if self._soul is not None:                  # 魂飞出去了: 戳一下就回来
+        if self._soul is not None:                  # 魂飞出去了: 戳一下就回来; 已经掉出去的要去抓住魂
+            if self._soul.get("loose") or self._soul.get("fall"):
+                self.kick(-0.5)
+                if not self.bubble.isVisible():
+                    pool = self._soul.get("lines") or C.SOUL_LOOSE_TEXTS
+                    tone = None if self._soul.get("lines") else "alert"
+                    self.say(self.pick_line(pool), force=True, duration=2.2, tone=tone)
+                return
             self._soul_back("click")
             return
         if self._lull is not None:                  # 快被哄睡着了被戳: 醒了, 不高兴
@@ -3814,7 +3856,13 @@ class PetWindow(QWidget):
         sx *= hs; sy = min(1.12, sy * hs)
         sx *= math.cos(math.radians(self.spin_angle))              # 绕竖轴转圈(背面即镜像)
         sx *= self.face if abs(self.face) > 0.04 else 0.04          # 走路转身
-        rot = max(-12.0, min(12.0, rot + self.tilt))
+        fall = self._soul_fall_deg(t)
+        if fall:
+            side = self._soul["side"] if self._soul is not None else -1
+            rot = side * fall                         # 朝魂飞走的那一侧倒下, 不受平时 ±12° 限制
+            dx = 0.0
+        else:
+            rot = max(-12.0, min(12.0, rot + self.tilt))
         cx = self.pad_x + self.char_w / 2 + dx
         foot_y = self.height() - PAD
         # 地面影子: 跳得越高越小越淡
@@ -3946,6 +3994,8 @@ class PetWindow(QWidget):
 
     def can_auto(self, what, acts=None):
         """自动行为 what(AUTO 表里的名字)现在能不能做; acts 可传入已算好的 activities()"""
+        if self._soul_down():
+            return False
         states, blockers = AUTO[what]
         if states is not None and self.state not in states:
             return False
@@ -4072,6 +4122,16 @@ class PetWindow(QWidget):
         """魂正飘在外面(soul_out 还没结束)"""
         return self._soul is not None
 
+    def soul_dismiss(self):
+        """收起外面的魂, 不演吸回去。人被整个接走(比如送医院)时用。"""
+        if self._soul is None:
+            return
+        self._soul = None
+        self.fx.soul = None
+        if self._soul_handle is not None:
+            self._soul_handle.hide()
+        self.update()
+
     def press_pending(self):
         """左键按下了、还没拖也没松开(插件判断长按用)"""
         return self._press is not None and not self._dragging
@@ -4091,10 +4151,12 @@ class PetWindow(QWidget):
             self._capture = None
 
     # ----- 魂飞出来 -----
-    def soul_out(self, sec=None, why="", then=None):
+    def soul_out(self, sec=None, why="", then=None, sky=False, status=None, lines=None, menu=False):
         """魂飞出来: 换成「魂飞了」的脸(状态是 dizzy), 魂(assets/soul.png)从嘴里飘到头的斜上方, 晃 sec 秒再被吸回去。
         戳她 / 拖她 / 状态被别的换掉 -> 魂马上回来。then: 魂回来以后做的事(比如原来那个「生气」收尾);
-        被拖走、被打断、睡着时不做。睡着 / 被拖着 / 在飞 / 探头 / 看不见 / 魂已经在外面 -> 不飘, 返回 False"""
+        被拖走、被打断、睡着时不做。睡着 / 被拖着 / 在飞 / 探头 / 看不见 / 魂已经在外面 -> 不飘, 返回 False。
+        sky: 立刻朝一侧倒下, 魂往天上飞, 到时间不吸回去。status 给小屋(插件没接时用);
+        lines 是点她时魂说的话; menu 为真时倒下了仍允许右键菜单。"""
         if (self._soul is not None or self.state == "sleep" or self._dragging or self.fling is not None
                 or self.edge or not self.isVisible()):
             return False
@@ -4105,9 +4167,15 @@ class PetWindow(QWidget):
         side = -1 if rect.left() - rect.width() * 0.2 > self.screen_rect().left() else 1     # 默认飘到左上, 贴着左边就右上
         why = str(why or "")
         self._soul = dict(t0=now, end=now + SOUL_OUT_SEC + sec, back_t0=None, back_sec=SOUL_BACK_SEC[0], e0=1.0,
-                          why=why, then=then, side=side, by=None, status=random.choice(C.STATUS_SOUL_TEXTS),
-                          tug=None, spring=None, tugs=0)
+                          why=why, then=then, side=side, by=None,
+                          status=status or random.choice(C.STATUS_SOUL_TEXTS),
+                          lines=list(lines) if lines else None, menu=bool(menu), keep_status=bool(status),
+                          tug=None, spring=None, tugs=0, far=0.0, fall=None, loose=False)
         self.set_state("dizzy", SOUL_OUT_SEC + sec + 3.0, expr="ko")
+        if sky:                                            # 倒下之后才标 fall, 否则 set_state 会被魂倒地拦住
+            self._soul["fall"] = now
+            self._soul["end"] = now + 3600.0
+            self.revert_timer.stop()
         self.kick(-1.6)
         self.sfx.play("whoosh")
         self.emit_event("soul", stage="out", why=why, memo=C.SOUL_MEMO.get(why) or C.SOUL_MEMO[""])
@@ -4121,6 +4189,48 @@ class PetWindow(QWidget):
             return 1 - (1 - u) ** 2
         u = min(1.0, (t - s["back_t0"]) / s["back_sec"])
         return s["e0"] * (1 - u * u)
+
+    def _soul_down(self):
+        """魂被转倒、还没抓住: 这段时间不换状态、不做别的互动"""
+        s = getattr(self, "_soul", None)
+        return s is not None and bool(s.get("fall") or s.get("loose"))
+
+    def _soul_fall_deg(self, t):
+        """魂被转太远: 她朝那一侧倒下的角度。还没倒是 0"""
+        s = self._soul
+        if s is None or s.get("fall") is None:
+            return 0.0
+        u = min(1.0, (t - s["fall"]) / SOUL_FALL_SEC)
+        return 78.0 * (1 - (1 - u) ** 2)
+
+    def _soul_spin_away(self, notches):
+        """魂在外面时滚轮不转身子, 把魂送得更远; 太远就倒下, 魂掉在旁边"""
+        s = self._soul
+        if s is None or s.get("back_t0") is not None or s.get("fall") or s.get("loose"):
+            return
+        s["far"] = (s.get("far") or 0.0) + SOUL_SPIN_STEP * notches
+        s["spins"] = s.get("spins", 0) + 1
+        s["end"] = max(s["end"], time.monotonic() + 2.0)
+        if s["far"] < SOUL_SPIN_MAX:
+            pools = C.SOUL_SPIN_LINES
+            pool = pools[min(s["spins"] - 1, len(pools) - 1)]
+            self.say(self.pick_line(pool), force=True, duration=1.8, tone="alert")
+            return
+        now = time.monotonic()
+        s["fall"] = now
+        s["end"] = now + 3600.0
+        self.stop_walk()
+        self.fling = None
+        self._bchase = None
+        self._soul_let = True
+        self.set_state("dizzy", expr="ko")          # 停住这张脸, 不让计时器把她换走
+        self._soul_let = False
+        self.revert_timer.stop()
+        self.sfx.play("whoosh")
+        s["loose"] = True
+        s["status"] = C.SOUL_LOOSE_STATUS
+        self.say(self.pick_line(C.SOUL_SNAP_TEXTS), force=True, duration=2.2, tone="alert")
+        self.emit_event("soul", stage="fall", why=s["why"], memo="你把她的魂转得太远，魂断了，自己往天上飞")
 
     def _soul_back(self, by):
         """魂往回飞(by: time 到时间 / click 被戳 / drag 被拖 / interrupt 状态被换掉)"""
@@ -4140,12 +4250,24 @@ class PetWindow(QWidget):
             self.fx.soul = None
             return
         if s["back_t0"] is None:
-            if self._dragging or self.fling is not None:
+            if s.get("loose") or s.get("fall"):
+                if s["back_t0"] is None and (self.state != "dizzy" or self._expr != "ko"):
+                    self._soul_let = True
+                    self.set_state("dizzy", expr="ko")
+                    self._soul_let = False
+                    self.revert_timer.stop()
+                if s.get("fall") and not s.get("loose") and t - s["fall"] >= SOUL_FALL_SEC:
+                    s["loose"] = True
+                    if not s.get("keep_status"):
+                        s["status"] = C.SOUL_LOOSE_STATUS
+                    self.emit_event("soul", stage="loose", why=s["why"],
+                                    memo="连着她的那缕烟断了，魂自己往天上飞")
+            elif self._dragging or self.fling is not None:
                 self._soul_back("drag")
             elif self.state != "dizzy" or self._expr != "ko" or self.edge or not self.isVisible():
                 self._soul_back("interrupt")
-            elif s["tug"] is not None or s["spring"] is not None:
-                s["end"] = max(s["end"], t + 0.8)            # 正揪着 / 还在弹: 先别收回去
+            elif s["tug"] is not None or s["spring"] is not None or s.get("far"):
+                s["end"] = max(s["end"], t + 0.8)            # 正揪着 / 还在弹 / 已经被转远: 先别收回去
             elif t >= s["end"]:
                 self._soul_back("time")
         if s["back_t0"] is not None and t - s["back_t0"] >= s["back_sec"]:
@@ -4163,16 +4285,27 @@ class PetWindow(QWidget):
         w, h = rect.width(), rect.height()
         e = self._soul_e(t)
         mouth = self.mouth_point() + QPointF(-0.06 * w, 0.02 * h)
-        target = QPointF(rect.center().x() + s["side"] * 0.23 * w + math.sin(t * 3.1) * 0.035 * w,
-                         rect.top() - 0.30 * h + math.sin(t * 2.3) * 0.02 * h)
+        far = s.get("far") or 0.0
+        hover = QPointF(rect.center().x() + s["side"] * (0.23 + far) * w + math.sin(t * 3.1) * 0.035 * w,
+                        rect.top() - (0.30 + 0.10 * min(far, 1.6)) * h + math.sin(t * 2.3) * 0.02 * h)
+        target = hover
+        if s.get("fall") is not None:
+            elapsed = max(0.0, t - s["fall"])
+            ceiling = self.screen_rect().top() + h * 0.45
+            rise = min(max(0.0, hover.y() - ceiling), elapsed * 150.0)
+            target = QPointF(hover.x() + math.sin(t * 1.7) * 8, hover.y() - rise)
         pos = mouth + (target - mouth) * e + off
         sw = SOUL_W * w * (0.25 + 0.75 * e)
         self._soul_handle_at(pos, sw, e > 0.8 and s["back_t0"] is None and bool(self.cfg["fx"]))
         if not self.cfg["fx"]:
             self.fx.soul = None
             return
-        bend = QPointF(mouth.x() + s["side"] * 0.62 * w * e, mouth.y() - 0.05 * h * e)      # 那缕烟从脸旁边绕上去
-        self.fx.soul = dict(pm=self.soul_pm, mouth=mouth, pos=pos, w=sw,
+        if s.get("loose"):
+            draw_mouth, bend = pos, pos                       # 魂已经掉出去: 烟断了
+        else:
+            draw_mouth = mouth
+            bend = QPointF(mouth.x() + s["side"] * 0.62 * w * e, mouth.y() - 0.05 * h * e)
+        self.fx.soul = dict(pm=self.soul_pm, mouth=draw_mouth, pos=pos, w=sw,
                             alpha=SOUL_ALPHA * min(1.0, e * 2.2), side=s["side"], e=e, bend=bend, stretch=stretch)
 
     def _soul_offset(self, t, w):
@@ -4226,6 +4359,10 @@ class PetWindow(QWidget):
         if s is None or s["back_t0"] is not None:
             return
         now = time.monotonic()
+        if kind == "press" and (s.get("loose") or s.get("fall")):
+            self.note_interaction()
+            self._soul_back("catch")                 # 魂掉出去了: 抓住它才回来
+            return
         if kind == "press":
             s["tug"] = dict(press=QPointF(gpos), cur=QPointF(gpos), t0=now)
             s["spring"] = None
@@ -4276,7 +4413,13 @@ class PetWindow(QWidget):
         self.emit_event("soul", stage="back", why=s["why"], by=by, memo=C.SOUL_BACK_MEMO.get(by))
         if by in ("drag", "interrupt") or self.state == "sleep" or not self.isVisible():
             return
-        if by == "yank":                                    # 魂被扯回来: 疼醒, 生气
+        if by == "catch":                                   # 魂掉在旁边, 被抓住了: 她站起来
+            self.set_state("surprised", 1.0)
+            self.kick(3.0)
+            self.sfx.play("pop")
+            self.burst("excl", 1, at=self.head_point() + QPointF(self.char_w * 0.22, -12))
+            self.say(self.pick_line(C.SOUL_CATCH_TEXTS), force=True, duration=2.2, tone="alert")
+        elif by == "yank":                                    # 魂被扯回来: 疼醒, 生气
             self.set_state("angry", 2.6)
             self.kick(4.0)
             self.sfx.play("hmph")
@@ -4302,9 +4445,9 @@ class PetWindow(QWidget):
                     then()
                 except Exception as e:
                     log_error("soul then", e)
-            elif by not in ("click", "yank"):
+            elif by not in ("click", "yank", "catch"):
                 self.say(self.pick_line(C.SOUL_BACK_TEXTS), force=True, duration=3.0, tone="alert")
-        QTimer.singleShot(1100 if by in ("click", "yank") else 800, after)
+        QTimer.singleShot(1100 if by in ("click", "yank", "catch") else 800, after)
 
     def screen_rect(self) -> QRect:
         """她所在屏幕的可用区域(扣掉任务栏)"""

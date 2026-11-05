@@ -71,6 +71,8 @@ def event_delta(name, d):
     if name == "focus_end" and d.get("done"):
         return "focus", 6.0
     if name == "food_effect_start":
+        if d.get("effect") == "burp":          # 冰镇可乐打嗝: 不好意思, 不扣心情
+            return None, 0.0
         return "prank", -4.0
     if name == "wake":
         return "wake", float(WAKE.get(d.get("why"), 0))
