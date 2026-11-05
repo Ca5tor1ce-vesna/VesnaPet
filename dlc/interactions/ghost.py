@@ -3,7 +3,9 @@
 怎么变成:
   - 魂被滚轮转断、往天上飘(本体), UNCAUGHT_SEC 秒还没去抓住 -> 身子也跟着飘出来, 整个人变成幽灵;
   - DARK_WINDOW 秒内吃下第三份黑暗料理 -> 魂回不去了, 干脆整个人飘出来;
-  - 设置「扩展」-> 👻 灵魂形态(测试)。
+  - 设置「扩展」-> 👻 灵魂形态(测试);
+  - 别的插件推事件 ghost_request(why, hold, status, memo): 比如生病 DLC —— 重病魂飘上天时没塞回去就送医院, 身子被接走,
+    魂落在桌面上。hold 秒内回不去: 不会淡没、最爱吃的香味也引不回去; 那个插件推 ghost_release 时才回到身体里(安安静静, 台词归它)。
 什么样: 现有每张表情都调成青白、半透明, 下半截化成一缕雾(不用新图); 离地飘着、上下浮(本体 lift 钩子), 脚下没有影子。
 越来越淡: 浓度从 1 往下掉, GHOST_SEC 秒掉完(晴天快一半, 附在鼠标上时慢一半, 藏起来时不掉);
   淡到 FAINT_AT 她开始慌, 掉到 0 打个喷嚏回到身体里。
@@ -20,7 +22,8 @@
   - 吓你: 鼠标从远处凑近她时, 偶尔「哇!」一声。
   - 达妮卡来访: 看不见她, 对着空气交代公务, 薇斯纳在旁边拼命挥手。
   - 哄睡(灵魂不用睡觉)、自己犯困睡着、捉弄插件的那些都不开; 被强行弄睡着(设置「立刻睡着」)就回到身体里。
-推事件 ghost(stage: start(why: soul dark manual) / smell(key, fav, cold) / possess / unpossess(why) / end(why)), 都带 memo。
+推事件 ghost(stage: start(why: soul dark manual 或请求里给的) / smell(key, fav, cold) / possess / unpossess(why) /
+end(why: faded smell sleep manual release)), 都带 memo。收事件 ghost_request / ghost_release(见上)。
 不存档: 关掉再开就回到身体里了。priority = 8: 比生病、哄她、捉弄、温柔先接戳和摸头。只用公开接口(docs/接口规范.md)。
 不想要就删掉这个文件。
 """
@@ -56,7 +59,8 @@ IDLE_GAP = (25.0, 45.0)              # 自己嘀咕一句的间隔
 
 GHOST_START = {"soul": ["……诶?身子……也跟着飘起来了?!", "魂没被抓住……我、我整个人都变成幽灵了?!"],
                "dark": ["……那个黑乎乎的……把我整个人都吃没了?!", "呜……这次魂回不去了,干脆整个人飘出来了!"],
-               "manual": ["……诶?我、我怎么透明了?!", "身子好轻……我变成幽灵了?!"]}
+               "manual": ["……诶?我、我怎么透明了?!", "身子好轻……我变成幽灵了?!"],
+               "hospital": ["……身子被抬走了……我、我还在这儿啊!", "等等!把我也带上——!(魂被落下了)"]}
 GHOST_IDLE = ["轻飘飘的~", "……原来飘着是这种感觉。", "嘿嘿,没有影子了。", "(试着穿过屏幕边)……唔,过不去嘛。", "……好安静啊。"]
 GHOST_POKE = ["嘻嘻,穿过去了~", "好凉……你的手指好凉!", "(打了个寒颤)……痒!", "戳不到戳不到~"]
 GHOST_DODGE = ["嗖——!抓不到~", "别戳啦!(飘走)"]
@@ -67,6 +71,7 @@ GHOST_WET = ["嘿嘿,水从我身上穿过去了~", "浇不湿~浇不湿~"]
 GHOST_SMELL = ["(吸——)……好香……", "闻着就像吃到了一样~", "(把香气吸了进去)……身子好像浓了一点。"]
 GHOST_SMELL_COLD = ["……冰的,一点香味都没有……", "闻不到……冰的东西没味道。"]
 GHOST_SMELL_FAV = ["……这个味道……!", "是、是我最喜欢的……!(跟着香味飘了过去)"]
+GHOST_SMELL_HELD = ["……闻到了……可是身子不在这儿,回不去……", "好香……等我回去了,再真的给我吃一口吧……"]
 GHOST_POSSESS = ["嘿嘿,借你的鼠标坐坐~", "钻进去咯~"]
 GHOST_UNPOSSESS = {"time": ["玩够了~(从鼠标里飘出来)", "呼,出来透透气~"], "shaken": ["甩、甩晕了……!", "哇啊——别甩啦!!"],
                    "menu": ["好嘛好嘛,出来就是了~"], "feed": ["闻、闻到了!(从鼠标里钻出来)"]}
@@ -84,12 +89,13 @@ STATUS = "整个人变成了魂,半透明地飘在半空,身后拖着一缕雾�
 STATUS_FAINT = "魂淡得快看不见了,慌慌张张地想抓住点什么……"
 STATUS_POSSESS = "魂钻进了你的鼠标里,你走到哪她跟到哪……"
 STATUS_KITE = "魂像只小风筝,跟着你的手飘……"
+STATUS_HELD = "身子不在这儿,魂一个人在桌面上飘着,等着回去……"
 MEMO_START = {"soul": "她的魂被转断了没人抓住，整个人跟着飘了出来，变成了半透明的幽灵",
               "dark": "她连吃了三份黑暗料理，整个人变成了半透明的幽灵",
               "manual": "她变成了半透明的幽灵"}
 MEMO_END = {"faded": "幽灵状态的她越来越淡，打了个喷嚏，回到了身体里",
             "smell": "她顺着最爱吃的东西的香味，回到了身体里",
-            "sleep": "她睡着了，灵魂回到了身体里", "manual": "她回到了身体里"}
+            "sleep": "她睡着了，灵魂回到了身体里", "manual": "她回到了身体里", "release": "她的魂回到了身体里"}
 
 
 def _pick(pool, last=None):
@@ -140,6 +146,8 @@ class Ghost:
         self.pet, self.log = pet, log_fn
         self.active = False
         self.why = None
+        self.hold_until = None               # 回不去到什么时候(墙上时间); 这之前不会淡没、香味也引不回去
+        self.hold_status = None
         self.amt = 1.0                       # 浓度(1 -> 0)
         self.faint_said = False
         self.weather = None
@@ -179,15 +187,25 @@ class Ghost:
                 and not p.danika.active())
 
     # ----- 变成 / 变回来 -----
-    def start(self, why="manual"):
+    def _held(self):
+        return self.hold_until is not None and time.time() < self.hold_until
+
+    def start(self, why="manual", hold=None, status=None, memo=None):
         p = self.pet
-        if self.active or not p.isVisible() or p.state == "sleep":
+        if self.active:                      # 已经是幽灵了: 只是这回回不去了
+            if hold:
+                self.hold_until, self.hold_status, self.why = time.time() + float(hold), status, why
+                p.emit_event("ghost", stage="start", why=why, hold=float(hold), memo=memo or MEMO_START.get(why, ""))
+            return True
+        if not p.isVisible() or p.state == "sleep":
             return False
         if p.soul_active():
             p.soul_dismiss()                 # 魂和身子一起飘出来: 不再是「魂在外面」
         p.stop_walk()
         now = time.monotonic()
         self.active, self.why = True, why
+        self.hold_until = time.time() + float(hold) if hold else None
+        self.hold_status = status
         self.amt, self.faint_said = 1.0, False
         self.pokes.clear()
         self.fall_at = None
@@ -200,7 +218,8 @@ class Ghost:
         p.burst("sparkle", 8)
         p.sfx.play("whoosh")
         self._say("start", GHOST_START.get(why) or GHOST_START["manual"], 2.8, "alert")
-        p.emit_event("ghost", stage="start", why=why, memo=MEMO_START.get(why, MEMO_START["manual"]))
+        p.emit_event("ghost", stage="start", why=why, hold=float(hold or 0.0),
+                     memo=memo or MEMO_START.get(why, MEMO_START["manual"]))
         return True
 
     def end(self, why="manual"):
@@ -212,6 +231,7 @@ class Ghost:
             self.kite = None
             p.release_mouse(self)
         self.active = False
+        self.hold_until = self.hold_status = None
         self._cache.clear()
         self._ghost_pm = None
         if why in ("faded", "smell") and p.isVisible() and p.state != "sleep":
@@ -301,11 +321,16 @@ class Ghost:
             return STATUS_POSSESS
         if self.kite is not None:
             return STATUS_KITE
+        if self._held():
+            return self.hold_status or STATUS_HELD
         return STATUS_FAINT if self.amt <= FAINT_AT else STATUS
 
     def status_text(self):
         if not self.active:
             return None
+        if self._held():
+            left = max(0, int(self.hold_until - time.time()))
+            return f"👻 灵魂出窍中 · 还要 {left // 60}:{left % 60:02d} 才回得去"
         return f"👻 灵魂出窍中 · 还剩 {max(0, int(round(self.amt * 100)))}%"
 
     def lift(self, t):
@@ -458,6 +483,14 @@ class Ghost:
             return
         p.burst("steam", 5, at=mp, bias=(0, -50))
         p.burst("sparkle", 3, at=mp)
+        if fav and self._held():                                   # 身子不在这儿: 引不回去
+            fav = False
+            self.amt = min(1.0, self.amt + SMELL_GAIN)
+            p.set_state("content", 1.8)
+            self._say("held", GHOST_SMELL_HELD, 2.6)
+            p.emit_event("ghost", stage="smell", key=key, fav=True, cold=False, held=True,
+                         memo="你拿她最爱吃的东西给她闻，可她的身子不在这儿，回不去")
+            return
         if fav:
             p.set_state("happy", 1.8)
             self._say("fav", GHOST_SMELL_FAV, 2.2, "happy")
@@ -507,7 +540,13 @@ class Ghost:
 
     def on_event(self, name, data):
         t = time.monotonic()
-        if name == "weather":
+        if name == "ghost_request":                                   # 别的插件: 让她变成幽灵(回不去 hold 秒)
+            self.start(str(data.get("why") or "manual"), hold=data.get("hold"), status=data.get("status"),
+                       memo=data.get("memo"))
+        elif name == "ghost_release":                                # 别的插件: 可以回身体里了
+            if self.active:
+                self.end("release")
+        elif name == "weather":
             self.weather = data.get("kind")
         elif name == "soul":
             stage = data.get("stage")
@@ -539,7 +578,9 @@ class Ghost:
             return
         if not p.isVisible():
             return
-        rate = 1.0 / GHOST_SEC
+        if self.hold_until is not None and not self._held():         # 等的时间到了(没人来接): 照常慢慢淡
+            self.hold_until = self.hold_status = None
+        rate = 0.0 if self._held() else 1.0 / GHOST_SEC              # 回不去的时候不会淡没
         if self.weather == "sunny":
             rate *= SUN_FASTER
         if self.possess is not None:
