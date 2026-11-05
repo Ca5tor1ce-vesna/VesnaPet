@@ -2943,7 +2943,7 @@ class PetWindow(QWidget):
     def menu_items_all(self):
         """右键菜单 / 托盘「互动」里会变的那几项: 本体的「哄她睡觉」(醒着时才有) + 插件的 menu_items()"""
         core = []
-        if self.state != "sleep" and self._lull is None and self.isVisible():
+        if self.state not in ("sleep", "dizzy") and self._lull is None and self.isVisible():   # 晕着(被打晕)时也不列
             core.append(("😴", "哄她睡觉", self.lull))
         return core + list(self._ix.menu_items())
 

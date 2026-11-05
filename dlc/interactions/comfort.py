@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""互动 DLC「哄她」: 她生气(被丢/转晕后/转吐后/闹别扭…)起 30 秒内摸头 -> 别扭地消气。
+"""互动 DLC「哄她」: 她生气(被丢/转晕后/转吐后/闹别扭…)起 30 秒内摸头 -> 别扭地消气(她晕着时听不见, 不算)。
 生气提前结束, 1-2 句傲娇台词, 好感 +2(原版 gain), 推 "comforted" 事件。每次生气只能哄一次;
 接管期间原版摸头的效果(+3 好感 / 闹别扭消气 +1)不执行, 不叠加。
 """
@@ -39,7 +39,7 @@ class Comfort:
         self.step(now)
         if not self.t0 or self.done or now - self.t0 > WINDOW:
             return False
-        if p.dragging or p.fling:
+        if p.dragging or p.fling or p.state == "dizzy":     # 晕着(转晕了、被打晕了)听不见你哄: 交回去
             return False
         self.done = True
         sulk = p.sulking()
