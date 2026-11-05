@@ -228,6 +228,18 @@ class Hub:
                     self._err("paint", e, pl)
         return pm, dx
 
+    def lift(self, t):
+        """插件让她离地往上飘多少像素(各插件加起来); 没有插件实现就是 0"""
+        up = 0.0
+        for pl in self.plugins:
+            f = getattr(pl, "lift", None)
+            if f is not None:
+                try:
+                    up += float(f(t) or 0.0)
+                except Exception as e:
+                    self._err("lift", e, pl)
+        return up
+
 
 def load(pet, log_fn=None) -> Hub:
     hub = Hub(log_fn)

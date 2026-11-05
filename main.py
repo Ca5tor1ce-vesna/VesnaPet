@@ -2959,7 +2959,8 @@ class PetWindow(QWidget):
         if self._soul_down() and not (s and s.get("menu")):   # 倒下等抓魂: 什么都做不了, 不列
             return []
         core = []
-        if self.state not in ("sleep", "dizzy") and self._lull is None and self.isVisible():   # 晕着(被打晕)时也不列
+        if (self.state not in ("sleep", "dizzy") and self._lull is None and self.isVisible()   # 晕着(被打晕)时也不列
+                and self._tune("lull_ok", True)):                  # 插件说这会儿不肯(法杖被抢、变成幽灵……)也不列
             core.append(("😴", "哄她睡觉", self.lull))
         return core + list(self._ix.menu_items())
 
@@ -3855,6 +3856,9 @@ class PetWindow(QWidget):
         if not self._landed:
             u = max(0.0, min(1.0, (t - self.jump_start) / self.jump_dur))
             jump = self.jump_h * 4 * u * (1 - u)
+        lift = self._ix.lift(t) if self._ix.plugins else 0.0      # 插件让她飘起来(比如变成幽灵): 和跳一样往上, 影子跟着变小
+        if lift > 0:
+            jump = min(jump + lift, self.hop_room * 0.9)
         sy = max(0.82, min(1.12, breath * (1 + self.sq) + sy_extra))
         sx = (1.0 + (1 - breath) * 0.5) * (1 - self.sq * 0.6)
         hs = 1.0 + 0.03 * self.hover_k

@@ -165,7 +165,7 @@ FLICK_GUARDED = ["不许再弹了!(捂住额头)", "哼,额头不给你!"]
 FLICK_CANCEL = ["……呼?不弹了?", "……吓死我了。"]
 STATUS_BUMP = "额头上鼓着个小包,时不时摸一下……"
 
-BUSY_HER = {"hidden", "drag", "fling", "throw", "spin", "danika", "food_fx", "edge", "frozen", "sick", "lull"}
+BUSY_HER = {"hidden", "drag", "fling", "throw", "spin", "danika", "food_fx", "edge", "frozen", "sick", "lull", "ghost"}
 
 # ----- 达妮卡来访时: 脸上被画了 / 额头有包 -----
 DANIKA_DOODLE = [("danika", "……薇斯纳大人。您脸上。"), ("vesna", "脸上?……有什么吗?"),
@@ -492,9 +492,10 @@ class Tease:
             items.append(("🖌", "画花脸", self.start_doodle))
         if self.doodle == "wearing" and p.state != "sleep":
             items.append(("🪞", "给她照照镜子", self.mirror))
-        if self.tiara_ok() and self.tia is None and self.wand is None and p.state != "sleep":
+        free = p.state != "sleep" and self._awake_free()           # 抢不了的时候(幽灵、生病、冻住……)不列
+        if self.tiara_ok() and self.tia is None and self.wand is None and free:
             items.append(("👑", "抢她的头冠", self.steal_from_menu))
-        if self.wand_ok() and self.wand is None and self.tia is None and p.state != "sleep":
+        if self.wand_ok() and self.wand is None and self.tia is None and free:
             items.append(("🪄", "抢她的法杖", self.steal_wand_from_menu))
         if self.wand is not None and self.wand["ret"] is None:
             items.append(("🪄", "把法杖还给她", lambda: self.wand_clicked(True)))

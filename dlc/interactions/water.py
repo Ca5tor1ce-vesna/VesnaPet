@@ -12,6 +12,7 @@
   拖着时的右键菜单被拦下(只拦拖着的时候)。
 台词来源标 src="water", 语音插件不会播。推 "watered"(dodged, asleep, forced, stuck)。
 别的插件报「frozen」(动不了)时她躲不开: 浇个正着, 推 watered(dodged=False, stuck=True), 表情和台词交给那个插件;
+报「ghost」(变成幽灵了)时水从她身上穿过去: 不躲、不湿、不扣好感、不生气, 推 watered(stuck=True, through=True);
 这时也不进究极生气(强行浇水把她冻住了就不气了), 连着浇只隔 1 秒。
 """
 import random
@@ -51,6 +52,7 @@ BUSY = {"drag", "fling", "throw", "food_fx", "edge", "spin", "danika", "vomit"} 
 STUCK = {"frozen"}                 # 别的插件报的「动不了」(比如天气 DLC 冻住了): 躲不开, 浇个正着(反应交给那个插件);
                                    # 也不进究极生气(冻成冰了还跺脚吹风说不通), 冷却缩到 STUCK_COOLDOWN
 STUCK_COOLDOWN = 1.0
+THROUGH = {"ghost"}                # 别的插件报的「水会穿过去」(变成幽灵了): 和 STUCK 一样不躲, 但不湿、不扣好感、不生气
 
 
 class Water:
@@ -141,7 +143,7 @@ class Water:
     def _start_rage(self, t):
         p = self.pet
         self.rage_pending = False
-        if p.activities() & STUCK:                    # 强行浇水把她冻住了: 动不了, 不生这个气
+        if p.activities() & (STUCK | THROUGH):        # 强行浇水把她冻住了 / 水穿过去了: 不生这个气
             return
         self.rage = dict(t0=t, next_fx=t, next_say=t + 0.2, next_stomp=t + 2.0, pets=0,
                          pokes=0, poke_say=0.0, next_blow=0.0, turn_until=0.0)
@@ -314,7 +316,7 @@ class Water:
     def water(self):
         p = self.pet
         now = time.monotonic()
-        stuck = bool(p.activities() & STUCK)
+        stuck = bool(p.activities() & (STUCK | THROUGH))
         cool = self.cool_until - (COOLDOWN - STUCK_COOLDOWN if stuck else 0.0)     # 动不了时连着浇也行(只防连点)
         if self.job is not None or now < cool or not p.isVisible():
             return
@@ -342,7 +344,7 @@ class Water:
             self._step_force(t)
         if self.rage_pending and not self.pet.dragging and self.pet.fling is None:
             self._start_rage(t)
-        if self.rage is not None and (self.pet.activities() & STUCK):
+        if self.rage is not None and (self.pet.activities() & (STUCK | THROUGH)):
             self.rage = None                          # 气着气着被冻住了: 这场气算了
         if self.rage is not None:
             self._step_rage(t)
@@ -443,6 +445,10 @@ class Water:
         """她动不了(冻住了之类)时被浇: 只有水花和好感 -1, 不换表情不说话 —— 让她动不了的那个插件自己接 watered(stuck=True)"""
         p = self.pet
         hp = p.head_point()
+        if p.activities() & THROUGH:                  # 水从她身上穿过去, 落在脚下
+            p.burst("drop", 5, at=p.foot_point(), bias=(0, 0))
+            p.emit_event("watered", dodged=False, asleep=False, stuck=True, through=True)
+            return
         p.burst("sweat", 8, at=hp, bias=(0, 0))
         p.burst("drop", 3, at=hp, bias=(0, 0))
         p.gain(-1, quiet=True)
