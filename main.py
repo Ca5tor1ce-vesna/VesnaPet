@@ -69,6 +69,8 @@ SOUL_SNAP = 1.6                 # 鼠标拖出去超过这么远(立绘宽的倍
 SOUL_SPIN_STEP = 0.75           # 魂在外面时, 滚轮一格把魂再送出去多远(立绘宽的倍数); 身子不转
 SOUL_SPIN_MAX = 2.2             # 送到这么远: 她倒下, 魂掉在旁边, 要抓住魂才起来
 SOUL_FALL_SEC = 0.7             # 倒下 / 魂落地要多久
+SOUL_FAR_HOLD = 1.5             # 停下滚轮这么久以后, 被转远的魂开始自己往回飘
+SOUL_FAR_BACK = 0.3             # 往回飘多快(立绘宽 / 秒); 飘回原处再照常回到身体里
 HUNGRY_FACE = 25                # 饱腹低于这个, 站着发呆时换成「饿了」那张
 FEED_REACTIONS = ("fav", "like", "ok", "dislike", "weird")     # 插件接管吃的反应时, feed 事件里能记成的档
 
@@ -2953,6 +2955,9 @@ class PetWindow(QWidget):
 
     def menu_items_all(self):
         """右键菜单 / 托盘「互动」里会变的那几项: 本体的「哄她睡觉」(醒着、没晕着时才有) + 插件的 menu_items()"""
+        s = self._soul
+        if self._soul_down() and not (s and s.get("menu")):   # 倒下等抓魂: 什么都做不了, 不列
+            return []
         core = []
         if self.state not in ("sleep", "dizzy") and self._lull is None and self.isVisible():   # 晕着(被打晕)时也不列
             core.append(("😴", "哄她睡觉", self.lull))
@@ -4210,6 +4215,7 @@ class PetWindow(QWidget):
             return
         s["far"] = (s.get("far") or 0.0) + SOUL_SPIN_STEP * notches
         s["spins"] = s.get("spins", 0) + 1
+        s["spun_at"] = time.monotonic()
         s["end"] = max(s["end"], time.monotonic() + 2.0)
         if s["far"] < SOUL_SPIN_MAX:
             pools = C.SOUL_SPIN_LINES
@@ -4249,7 +4255,13 @@ class PetWindow(QWidget):
         if s is None:
             self.fx.soul = None
             return
+        dt = max(0.0, min(0.1, t - s.get("last_t", t)))
+        s["last_t"] = t
         if s["back_t0"] is None:
+            if self.state == "dizzy" and self.revert_timer.isActive():     # 魂还在外面: 晕着的脸别先到点换掉
+                need = int((max(s["end"], t) - t + 1.5) * 1000)
+                if self.revert_timer.remainingTime() < need:
+                    self.revert_timer.start(need)
             if s.get("loose") or s.get("fall"):
                 if s["back_t0"] is None and (self.state != "dizzy" or self._expr != "ko"):
                     self._soul_let = True
@@ -4267,6 +4279,8 @@ class PetWindow(QWidget):
             elif self.state != "dizzy" or self._expr != "ko" or self.edge or not self.isVisible():
                 self._soul_back("interrupt")
             elif s["tug"] is not None or s["spring"] is not None or s.get("far"):
+                if s.get("far") and s["tug"] is None and s["spring"] is None and t - s.get("spun_at", 0.0) > SOUL_FAR_HOLD:
+                    s["far"] = max(0.0, s["far"] - SOUL_FAR_BACK * dt)   # 不转了: 魂慢慢飘回头顶
                 s["end"] = max(s["end"], t + 0.8)            # 正揪着 / 还在弹 / 已经被转远: 先别收回去
             elif t >= s["end"]:
                 self._soul_back("time")
