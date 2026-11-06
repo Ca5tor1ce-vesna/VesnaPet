@@ -63,7 +63,7 @@ def event_delta(name, d):
     if name == "sulk":
         return "sulk", -8.0
     if name == "sneak_caught":
-        return "sneak", -1.0
+        return None, 0.0                       # 偷吃被抓: 害羞否认, 心情不掉也不涨
     if name == "companion_bonus":
         return "company", 4.0
     if name == "level_up":
