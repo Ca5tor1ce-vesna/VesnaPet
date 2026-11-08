@@ -53,6 +53,8 @@ def event_delta(name, d):
     if name == "vomit":
         return "vomit", -12.0
     if name == "watered":
+        if d.get("through"):                   # 浇在灵魂上: 穿过去, 心情不掉也不涨
+            return None, 0.0
         if d.get("forced"):
             return "water", -15.0
         return ("water", 2.0) if d.get("dodged") else ("water", -8.0)

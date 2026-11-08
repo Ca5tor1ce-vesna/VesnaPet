@@ -101,6 +101,12 @@ class Water:
         if now < self.force_cool:
             self._say(AGAIN_LINES, 2.0)
             return True
+        if p.activities() & THROUGH:           # 灵魂: 水穿过去, 不扣好感, 不生气
+            self.force_cool = now + FORCE_COOLDOWN
+            self.job = None
+            p.burst("drop", 5, at=p.foot_point(), bias=(0, 0))
+            p.emit_event("watered", dodged=False, asleep=False, stuck=True, through=True, forced=True)
+            return True
         self.force_cool = now + FORCE_COOLDOWN
         self.job = None
         hp = p.head_point()
