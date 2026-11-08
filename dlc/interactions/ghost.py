@@ -7,7 +7,13 @@
   - 别的插件推事件 ghost_request(why, hold, status, memo, body): 比如生病 DLC —— 重病魂飘上天时没塞回去就送医院,
     身子被接走, 魂落在桌面上。hold 秒内回不去: 不会淡没、最爱吃的香味也引不回去; 那个插件推 ghost_release 时才回到身子里
     (安安静静, 台词归它)。body=False: 身子不在桌面上(在医院)。
-身子: 平时她的身子侧躺在原地(X 眼), 是一个单独的小窗(和雪人一样): 可以拖走藏起来, 点它她会急。
+身子: 平时她的身子侧躺在原地(X 眼), 是一个单独的小窗(和雪人一样): 可以拖走藏起来, 点它她会急;
+  右键身子 = 作弄菜单(她的魂在旁边全看着, 当场有反应; 回到身子里时还带着):
+    🖌 在脸上画画(和睡着时一样拿笔画, 右键收笔; 回来顶着涂鸦, 她看见了 -> 马上擦、记仇) / 🧻 擦干净;
+    📝 脑门上贴纸条(回来一把撕掉) / 撕掉; 👋 弹脑门(身子额头鼓包, 回来还鼓着);
+    🪶 羽毛挠痒痒(魂笑得打滚, 连挠三下生气); 🚿 浇水(身子湿透, BODY_WET_SEC 秒晾干; 没干就回来 = 她湿漉漉的, 算被浇了);
+    👑 摘掉头冠(要 assets/ko_notiara.png: 没戴头冠、X 眼那张; 头冠放在身子旁边, 回来她走过去捡) / 戴回去;
+    🛏 盖小被子(她很感动) / 掀开。
   淡没了 / 闻着最爱吃的香味要回去时, 魂飘回身子那儿再钻进去(身子被你拖到哪, 她就飘到哪)。
 什么样: 现有每张表情都调成青白、半透明, 下半截化成一缕雾(不用新图); 离地飘着、上下浮(本体 lift 钩子), 脚下没有影子。
 越来越淡: 浓度从 1 往下掉, GHOST_SEC 秒掉完(晴天快一半, 附在鼠标上时慢一半, 藏起来、散开时不掉);
@@ -42,7 +48,8 @@ from collections import deque
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QCursor, QLinearGradient, QPainter, QPen, QPixmap, QRadialGradient
+from PySide6.QtGui import (QColor, QCursor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap,
+                           QRadialGradient)
 from PySide6.QtWidgets import QMenu, QWidget
 
 ASSETS = Path(__file__).resolve().parents[2] / "assets"
@@ -107,7 +114,23 @@ GHOST_UNPOSSESS = {"time": ["玩够了~(从鼠标里飘出来)", "呼,出来透�
 GHOST_EXIT = ["呼~从{where}里钻出来了!", "嘿嘿,{where}里面好挤~"]
 GHOST_BODY_POKE = ["那、那是我的身子!别戳!", "喂!别碰我的身子!", "……(身子被戳了一下,魂这边打了个哆嗦)"]
 GHOST_BODY_MOVED = ["诶!我的身子!别拖走!", "你、你把我的身子藏哪去了?!", "……回头我得去那边找身子了。"]
+BODY_WET_SEC = 90.0                  # 身子被浇湿, 这么久晾干
+BODY_NOTES = ["我是笨蛋", "出窍中 勿扰", "魂不在家"]
+BODY_INK = QColor(34, 34, 46)
+BODY_BUMP_SPOT = (0.57, 0.40)        # 额头的包(和捉弄插件一样)
+BODY_NOTE_SPOT = (0.47, 0.30)        # 纸条贴在哪
 GHOST_BODY_DOODLE = ["你、你在我脸上画什么!!我现在擦不到!", "呜哇!脸上……我看见了!快擦掉!", "魂在这儿,脸在那儿……你欺负我!"]
+GHOST_BODY_DRAWING = ["住、住手!!别画了!!", "那是我的脸!!", "……(魂在旁边干着急)"]
+GHOST_BODY_NOTE = ["「{note}」?!……你往我脑门上贴的什么!!", "上面写着「{note}」……你给我等着!!"]
+GHOST_BODY_NOTE_OFF = ["……哼,撕掉就好。", "早该撕了!"]
+GHOST_BODY_TICKLE = ["噗——哈哈哈!住、住手!!", "痒、痒死了——!魂都要笑散了!", "哈哈哈……你、你等着!!"]
+GHOST_BODY_TICKLE_MAD = ["……(喘)……够、够了!!再挠我真的生气了!!", "哈……哈……不许再挠了!!"]
+GHOST_BODY_WATER = ["我的身子!!会着凉的!!", "呜哇——身子湿透了!!回去要冻死了!!"]
+GHOST_BODY_BLANKET = ["……(愣了一下)谢谢你帮我看着身子。", "盖、盖被子?……嗯,身子不会着凉了。"]
+GHOST_BODY_BLANKET_OFF = ["诶?怎么掀开了……", "……身子会冷的啦。"]
+GHOST_BACK_NOTE = ["(一把撕下纸条)……「{note}」?!你才是!!", "(把纸条揉成一团扔掉)……哼!!"]
+GHOST_BACK_WET = ["……身、身上怎么湿漉漉的?!是你浇的吧!!", "阿嚏!……衣服全湿了!!"]
+GHOST_BACK_BLANKET = ["……被子还暖着。谢谢你一直看着我的身子。", "(抱着小被子)……回来了。谢谢你。"]
 GHOST_BODY_WIPE = ["……擦掉了就好。别再画了。", "哼,算你还给我擦了。"]
 GHOST_BODY_FLICK = ["呜!弹身子我也会痛!", "……(魂跟着一抽)", "别弹了!我又躲不开!"]
 GHOST_BODY_CROWN_OFF = ["我的头冠!还给我!", "你、你把我的头冠摘了?!"]
@@ -201,8 +224,11 @@ class BodyWin(QWidget):
                for x, y in ((-cw / 2, -ch), (cw / 2, -ch), (cw / 2, 0.0), (-cw / 2, 0.0))]
         xs, ys = [q[0] for q in pts], [q[1] for q in pts]
         m = 8
-        self.resize(int(max(xs) - min(xs)) + 2 * m, int(max(ys) - min(ys)) + 2 * m)
-        self.pivot = QPointF(m - min(xs), m - min(ys))      # 脚底(转的那一点)在窗口里的位置
+        self.spare = cw * 0.42                               # 脚那一侧多留的地方: 摘下来的头冠放在那儿
+        left = m + (self.spare if side > 0 else 0.0)
+        right = m + (self.spare if side < 0 else 0.0)
+        self.resize(int(max(xs) - min(xs) + left + right), int(max(ys) - min(ys)) + 2 * m)
+        self.pivot = QPointF(left - min(xs), m - min(ys))   # 脚底(转的那一点)在窗口里的位置
         self.shake_until = 0.0
         self.drag_off = self.press_g = None
         self.moved = False
@@ -223,27 +249,102 @@ class BodyWin(QWidget):
         q.setPen(Qt.NoPen)                                   # 地上的影子
         q.setBrush(QColor(30, 40, 70, 38))
         q.drawEllipse(QPointF(self.pivot.x() + self.side * self.ch * 0.45, self.pivot.y() - 2), self.ch * 0.5, 6)
+        mk = self.plug.marks
+        t = time.monotonic()
+        cw, ch = self.cw, self.ch
+        if mk["wet"] > 0.05:                                 # 地上一摊水
+            q.setBrush(QColor(150, 200, 240, int(110 * mk["wet"])))
+            q.drawEllipse(QPointF(self.pivot.x() + self.side * ch * 0.45, self.pivot.y() - 1), ch * 0.55, 7)
+        q.save()
         q.translate(self.pivot.x() + jit, self.pivot.y())
         q.rotate(BODY_TILT * self.side)
-        q.drawPixmap(QRectF(-self.cw / 2, -self.ch, self.cw, self.ch), self.pm, QRectF(self.pm.rect()))
-        marks = getattr(self.plug, "body_tease", ())
-        if "doodle" in marks:                            # 脸上的一笔, 跟着身子倒着
-            q.setPen(QPen(QColor(226, 72, 122), 3))
-            y = -self.ch * 0.72
-            x = -self.cw * 0.06
-            q.drawLine(QPointF(x - 8, y - 6), QPointF(x + 10, y + 7))
-            q.drawLine(QPointF(x + 10, y - 6), QPointF(x - 8, y + 7))
-        if "crown" in marks:                             # 摘下来的小头冠, 放在身子旁边
+        q.drawPixmap(QRectF(-cw / 2, -ch, cw, ch), self.plug.body_pm_now(), QRectF(self.pm.rect()))
+
+        def at(nx, ny):                                      # 立绘比例坐标 -> 这里(已经跟着身子转过了)
+            return QPointF(nx * cw - cw / 2, ny * ch - ch)
+        if mk["wet"] > 0.05:                                 # 湿透了: 一层水光 + 水珠
+            q.setOpacity(0.45 * mk["wet"])
+            q.drawPixmap(QRectF(-cw / 2, -ch, cw, ch), self.plug.body_wet_pm(), QRectF(self.pm.rect()))
+            q.setOpacity(1.0)
+            q.setBrush(QColor(225, 245, 255, int(220 * mk["wet"])))
+            for nx, ny in ((0.40, 0.36), (0.62, 0.30), (0.33, 0.58), (0.70, 0.62), (0.52, 0.80), (0.28, 0.80)):
+                q.drawEllipse(at(nx, ny), cw * 0.012, cw * 0.018)
+        if mk["strokes"]:                                    # 脸上画的(和睡着时画的一样的墨)
+            pen = QPen(BODY_INK, max(1.6, cw * 0.013))
+            pen.setCapStyle(Qt.RoundCap)
+            pen.setJoinStyle(Qt.RoundJoin)
+            q.setPen(pen)
+            q.setBrush(Qt.NoBrush)
+            for st in mk["strokes"]:
+                if len(st) < 2:
+                    continue
+                path = QPainterPath(at(*st[0]))
+                for nx, ny in st[1:]:
+                    path.lineTo(at(nx, ny))
+                q.drawPath(path)
             q.setPen(Qt.NoPen)
-            q.setBrush(QColor(255, 214, 90))
-            cx = self.side * self.cw * 0.62
-            cy = -self.ch * 0.08
-            q.drawRect(QRectF(cx - 9, cy - 4, 18, 7))
-            q.drawPolygon([QPointF(cx - 9, cy - 4), QPointF(cx - 5, cy - 14), QPointF(cx - 1, cy - 4)])
-            q.drawPolygon([QPointF(cx - 1, cy - 4), QPointF(cx + 4, cy - 16), QPointF(cx + 9, cy - 4)])
+        if mk["bump"] > 0.01:                                # 额头鼓的包
+            r = cw * (0.022 + 0.022 * min(1.6, mk["bump"]))
+            c = at(*BODY_BUMP_SPOT)
+            g = QRadialGradient(c, r)
+            g.setColorAt(0, QColor(255, 120, 130, 230))
+            g.setColorAt(0.65, QColor(250, 140, 150, 200))
+            g.setColorAt(1, QColor(250, 160, 170, 0))
+            q.setBrush(g)
+            q.drawEllipse(c, r, r * 0.85)
+        if mk["note"]:                                       # 脑门上的纸条
+            paint_note(q, at(*BODY_NOTE_SPOT), cw, ch, mk["note"])
+        if mk["blanket"]:                                    # 小被子
+            paint_blanket(q, cw, ch)
+        if t < mk["tickle_until"]:                           # 羽毛
+            c = at(0.30, 0.66)
+            q.save()
+            q.translate(c)
+            q.rotate(-30 + 18 * math.sin(t * 28.0))
+            fp = QPainterPath()
+            fp.moveTo(0, 0)
+            fp.cubicTo(cw * 0.06, -ch * 0.05, cw * 0.06, -ch * 0.20, 0, -ch * 0.26)
+            fp.cubicTo(-cw * 0.05, -ch * 0.18, -cw * 0.05, -ch * 0.05, 0, 0)
+            q.setBrush(QColor(250, 245, 255))
+            q.setPen(QPen(QColor(120, 130, 170), 1.2))
+            q.drawPath(fp)
+            q.drawLine(QPointF(0, ch * 0.04), QPointF(0, -ch * 0.24))
+            q.restore()
+            q.setPen(Qt.NoPen)
+        q.restore()
+        if mk["crown"] and self.plug.tiara_pm is not None:    # 摘下来的头冠, 放在脚那一侧的地上
+            tp = self.plug.tiara_pm
+            tw = cw * 0.36
+            th = tw * tp.height() / max(1, tp.width())
+            cx = self.tiara_spot().x() - self.x()
+            q.drawPixmap(QRectF(cx - tw / 2, self.height() - 8 - th, tw, th), tp, QRectF(tp.rect()))
+        u = t - mk["water_t0"]
+        if 0.0 <= u < 1.1:                                   # 正在浇: 水从上面落下来
+            q.setBrush(QColor(150, 205, 245, 210))
+            for k in range(14):
+                x = self.pivot.x() + self.side * ch * (0.15 + 0.06 * k) + 6 * math.sin(k * 1.7)
+                y = ((u * 1.6 + k * 0.13) % 1.0) * (self.pivot.y() - 4)
+                q.drawEllipse(QPointF(x, y), 2.2, 4.0)
         q.end()
 
+    def tiara_spot(self):
+        """摘下来的头冠放在哪(屏幕坐标, 头冠底边的中点)"""
+        x = self.pivot.x() - self.side * (self.cw * 0.12 + self.spare * 0.5)
+        return QPointF(self.x() + x, self.y() + self.height() - 8)
+
+    def to_sprite(self, pos):
+        """窗口里的一点 -> 身子立绘里的比例坐标(倒着的身子转回来算)"""
+        x, y = pos.x() - self.pivot.x(), pos.y() - self.pivot.y()
+        a = -math.radians(BODY_TILT * self.side)
+        xr, yr = x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a)
+        return (xr + self.cw / 2) / self.cw, (yr + self.ch) / self.ch
+
     def mousePressEvent(self, e):
+        if self.plug.body_drawing:                           # 拿着笔: 按住拖 = 画
+            if e.button() == Qt.LeftButton:
+                self.plug.body_stroke("press", self.to_sprite(e.position()))
+            e.accept()
+            return
         if e.button() == Qt.LeftButton:
             self.press_g = e.globalPosition().toPoint()
             self.drag_off = self.press_g - self.frameGeometry().topLeft()
@@ -252,6 +353,11 @@ class BodyWin(QWidget):
         e.accept()
 
     def mouseMoveEvent(self, e):
+        if self.plug.body_drawing:
+            if e.buttons() & Qt.LeftButton:
+                self.plug.body_stroke("move", self.to_sprite(e.position()))
+            e.accept()
+            return
         if self.drag_off is not None and e.buttons() & Qt.LeftButton:
             if (e.globalPosition().toPoint() - self.press_g).manhattanLength() > 4:
                 self.moved = True
@@ -259,6 +365,11 @@ class BodyWin(QWidget):
         e.accept()
 
     def mouseReleaseEvent(self, e):
+        if self.plug.body_drawing:
+            if e.button() == Qt.LeftButton:
+                self.plug.body_stroke("release", None)
+            e.accept()
+            return
         if self.drag_off is not None:
             self.plug.body_moved() if self.moved else self.plug.body_poked()
         self.drag_off = None
@@ -266,8 +377,50 @@ class BodyWin(QWidget):
         e.accept()
 
     def contextMenuEvent(self, e):
-        self.plug.body_menu(e.globalPos())
+        if self.plug.body_drawing:                           # 拿着笔时右键 = 收笔
+            self.plug.end_body_doodle()
+        else:
+            self.plug.body_menu(e.globalPos())
         e.accept()
+
+
+def paint_note(q, c, cw, ch, text):
+    """脑门上的一张小纸条(带一截胶带)"""
+    w, h = cw * 0.30, ch * 0.10
+    q.save()
+    q.translate(c)
+    q.rotate(-6)
+    q.setPen(QPen(QColor(150, 140, 120), 1.0))
+    q.setBrush(QColor(255, 250, 225))
+    q.drawRect(QRectF(-w / 2, -h / 2, w, h))
+    q.setPen(Qt.NoPen)
+    q.setBrush(QColor(200, 225, 245, 170))
+    q.drawRect(QRectF(-w * 0.12, -h * 0.75, w * 0.24, h * 0.42))
+    f = QFont()
+    f.setPixelSize(max(7, int(h * 0.55)))
+    f.setBold(True)
+    q.setFont(f)
+    q.setPen(QColor(60, 50, 60))
+    q.drawText(QRectF(-w / 2, -h / 2, w, h), Qt.AlignCenter, text)
+    q.restore()
+    q.setPen(Qt.NoPen)
+
+
+def paint_blanket(q, cw, ch):
+    """盖在身子上的小被子(胸口往下, 和身子差不多宽)"""
+    r = QRectF(-cw * 0.30, -ch * 0.40, cw * 0.60, ch * 0.38)
+    q.setPen(QPen(QColor(150, 130, 175), 1.2))
+    q.setBrush(QColor(252, 222, 234, 240))
+    q.drawRoundedRect(r, cw * 0.09, cw * 0.09)
+    q.setPen(QPen(QColor(255, 255, 255, 150), max(1.5, cw * 0.012)))      # 浅浅的格子
+    for k in range(1, 4):
+        x = r.left() + r.width() * k / 4.0
+        q.drawLine(QPointF(x, r.top() + ch * 0.06), QPointF(x, r.bottom() - ch * 0.03))
+    band = QRectF(r.left() + cw * 0.01, r.top(), r.width() - cw * 0.02, ch * 0.06)   # 翻过来的被头
+    q.setPen(QPen(QColor(150, 130, 175), 1.0))
+    q.setBrush(QColor(255, 250, 252))
+    q.drawRoundedRect(band, cw * 0.03, cw * 0.03)
+    q.setPen(Qt.NoPen)
 
 
 class Orb(QWidget):
@@ -338,7 +491,12 @@ class Ghost:
         self.boo_cool = 0.0
         self.cur_d = None                    # 上一帧鼠标离她多远(立绘宽的倍数)
         self.say_cool = self.body_cool = 0.0
-        self.body_tease = set()             # 留在地上的身子被作弄过: doodle / crown
+        self.marks = self._fresh_marks()      # 留在地上的身子被作弄成什么样了(见 _fresh_marks)
+        self.body_drawing = False            # 正拿着笔在身子脸上画
+        self.cur_stroke = None
+        self.after_note = None               # 回到身子里以后, 脑门上那张纸条还贴一会儿: dict(text, until)
+        self.tiara_pm = None
+        self._nocrown_pm = self._wet_pm = None
         self._last = {}
         self._cache = {}
         self._blank_pm = None
@@ -446,6 +604,8 @@ class Ghost:
     def _finish(self, why):
         p = self.pet
         self.home = None
+        carry = self._carry_marks() if self.body is not None and why != "release" else None
+        self.end_body_doodle()
         self._remove_body()
         self.active = False
         self.hold_until = self.hold_status = None
@@ -461,6 +621,8 @@ class Ghost:
             p.mood.add(3.0)
             QTimer.singleShot(900, lambda: self._say("back_" + why, GHOST_BACK[why], 2.8, "happy"))
         p.emit_event("ghost", stage="end", why=why, memo=MEMO_END.get(why, MEMO_END["manual"]))
+        if carry is not None:
+            self._bring_back(carry, 3.2 if why in ("faded", "smell") else 1.0)
 
     # ----- 地上的身子 -----
     def _body_pixmap(self):
@@ -475,6 +637,8 @@ class Ghost:
 
     def _drop_body(self):
         p = self.pet
+        if self.tiara_pm is None:
+            self.tiara_pm = self._load_pm("tiara.png", fit=False)
         pm = self._body_pixmap()
         if pm is None:
             return
@@ -485,7 +649,8 @@ class Ghost:
         b.place_foot(f)
         b.show()
         self.body = b
-        self.body_tease = set()
+        self.marks = self._fresh_marks()
+        self.body_drawing = False
 
     def _remove_body(self):
         b, self.body = self.body, None
@@ -523,54 +688,265 @@ class Ghost:
         p.emit_event("ghost", stage="body", what="moved", far=round(d, 1),
                      memo="你把她留在地上的身子拖走藏了起来（互动）" if d > 2.0 else None)
 
+    # ----- 作弄留在地上的身子 -----
+    @staticmethod
+    def _fresh_marks():
+        return dict(strokes=[], note=None, bump=0.0, wet=0.0, water_t0=-1e9, crown=False, blanket=False,
+                    tickle_until=0.0, tickles=[], doodled=False)
+
+    def _load_pm(self, name, fit=True):
+        f = ASSETS / name
+        pm = QPixmap(str(f)) if f.is_file() else QPixmap()
+        if pm.isNull():
+            return None
+        return self.pet.fit_sprite(pm) if fit else pm
+
+    def nocrown_ok(self):
+        """有没有「没戴头冠、X 眼」那张图(没有就不让摘头冠: 身子上的头冠画在图里, 拿不下来)"""
+        if self._nocrown_pm is None:
+            self._nocrown_pm = self._load_pm("ko_notiara.png") or False
+        return bool(self._nocrown_pm)
+
+    def body_pm_now(self):
+        b = self.body
+        if self.marks["crown"] and self.nocrown_ok():
+            return self._nocrown_pm
+        return b.pm if b is not None else self._body_pixmap()
+
+    def body_wet_pm(self):
+        """身子湿透时盖上去的一层水光(只染有画的地方)"""
+        src = self.body_pm_now()
+        ck = ("wet", src.cacheKey())
+        if self._wet_pm is None or self._wet_pm[0] != ck:
+            out = QPixmap(src.size())
+            out.fill(Qt.transparent)
+            q = QPainter(out)
+            q.drawPixmap(0, 0, src)
+            q.setCompositionMode(QPainter.CompositionMode_SourceAtop)
+            q.fillRect(out.rect(), QColor(120, 180, 240, 200))
+            q.end()
+            self._wet_pm = (ck, out)
+        return self._wet_pm[1]
+
     def body_menu(self, gpos):
-        """右键留在地上的身子, 跟雪人一样作弄"""
-        if self.body is None:
+        """右键留在地上的身子: 跟雪人一样作弄(她的魂全看着)"""
+        if self.body is None or not self.active:
             return
+        mk = self.marks
         m = QMenu()
-        if "doodle" in self.body_tease:
-            m.addAction("🧻 把脸上的画擦掉").triggered.connect(lambda: self._body_tease("wipe"))
+        if self.body_drawing:
+            m.addAction("✅ 画好了").triggered.connect(self.end_body_doodle)
+            m.exec(gpos)
+            return
+        m.addAction("🖌 接着画" if mk["strokes"] else "🖌 在她脸上画画").triggered.connect(self.start_body_doodle)
+        if mk["strokes"]:
+            m.addAction("🧻 把脸擦干净").triggered.connect(lambda: self._body_tease("wipe"))
+        if mk["note"]:
+            m.addAction("📝 撕掉脑门上的纸条").triggered.connect(lambda: self._body_tease("note_off"))
         else:
-            m.addAction("😜 在脸上画一笔").triggered.connect(lambda: self._body_tease("doodle"))
+            m.addAction("📝 脑门上贴张纸条").triggered.connect(lambda: self._body_tease("note"))
         m.addAction("👋 弹一下脑门").triggered.connect(lambda: self._body_tease("flick"))
-        if "crown" in self.body_tease:
-            m.addAction("👑 把头冠戴回去").triggered.connect(lambda: self._body_tease("crown_on"))
+        m.addAction("🪶 用羽毛挠痒痒").triggered.connect(lambda: self._body_tease("tickle"))
+        m.addAction("🚿 浇点水").triggered.connect(lambda: self._body_tease("water"))
+        if self.nocrown_ok() and self.tiara_pm is not None:
+            if mk["crown"]:
+                m.addAction("👑 把头冠戴回去").triggered.connect(lambda: self._body_tease("crown_on"))
+            else:
+                m.addAction("👑 摘掉头冠").triggered.connect(lambda: self._body_tease("crown_off"))
+        if mk["blanket"]:
+            m.addAction("🛏 掀开小被子").triggered.connect(lambda: self._body_tease("blanket_off"))
         else:
-            m.addAction("👑 摘掉头冠").triggered.connect(lambda: self._body_tease("crown_off"))
+            m.addAction("🛏 给她盖上小被子").triggered.connect(lambda: self._body_tease("blanket"))
         m.exec(gpos)
 
-    def _body_tease(self, kind):
+    def start_body_doodle(self):
         b, p = self.body, self.pet
+        if b is None or not self.active or self.body_drawing:
+            return
+        self.body_drawing = True
+        self.cur_stroke = None
+        b.setCursor(Qt.CrossCursor)
+        p.note_interaction()
+        if not self.marks["doodled"]:
+            self.marks["doodled"] = True
+            p.mood.add(-2.0, cat="ghost_body")
+        self._ghost_react("angry")
+        self._say("bdoodle", GHOST_BODY_DOODLE, 2.6, "alert")
+        p.emit_event("ghost", stage="body", what="doodle",
+                     memo="你拿笔在她留在地上的身子脸上画画，她的魂在旁边干着急（互动）")
+
+    def end_body_doodle(self):
+        if not self.body_drawing:
+            return
+        self.body_drawing = False
+        self.cur_stroke = None
+        if self.body is not None:
+            self.body.setCursor(Qt.OpenHandCursor)
+            self.body.update()
+
+    def body_stroke(self, kind, n):
+        mk, b = self.marks, self.body
+        if b is None:
+            return
+        if kind == "press":
+            self.cur_stroke = [n]
+            mk["strokes"].append(self.cur_stroke)
+            if time.monotonic() >= self.body_cool:              # 画一笔她嚷一句(别太密)
+                self.body_cool = time.monotonic() + 2.5
+                self._say("bdraw", GHOST_BODY_DRAWING, 1.8, "alert")
+        elif kind == "move" and self.cur_stroke is not None:
+            lx, ly = self.cur_stroke[-1]
+            if math.hypot(n[0] - lx, n[1] - ly) >= 0.006:
+                self.cur_stroke.append(n)
+        elif kind == "release" and self.cur_stroke is not None:
+            if len(self.cur_stroke) == 1:                       # 点一下 = 一个点
+                self.cur_stroke.append((self.cur_stroke[0][0] + 0.002, self.cur_stroke[0][1]))
+            self.cur_stroke = None
+        b.update()
+
+    def _ghost_react(self, state, sec=1.6):
+        """她(魂)在旁边当场的反应: 还在原地才换表情"""
+        p = self.pet
+        if not self._away() and p.isVisible():
+            p.set_state(state, sec)
+            p.kick(-1.0)
+
+    def _body_tease(self, kind):
+        b, p, mk = self.body, self.pet, self.marks
         if b is None or not self.active:
             return
+        t = time.monotonic()
         p.note_interaction()
-        b.shake_until = time.monotonic() + (0.7 if kind == "flick" else 0.4)
-        if kind == "doodle":
-            self.body_tease.add("doodle")
-            p.mood.add(-2.0, cat="ghost_body")
-            self._say("bdoodle", GHOST_BODY_DOODLE, 2.6, "alert")
-            memo = "你在她留在地上的脸上画了一笔，魂急得擦不到（互动）"
-        elif kind == "wipe":
-            self.body_tease.discard("doodle")
-            p.mood.add(1.0, cat="ghost_body")
+        b.shake_until = t + (0.7 if kind in ("flick", "tickle") else 0.35)
+        mood, memo = 0.0, None
+        if kind == "wipe":
+            mk["strokes"] = []
+            mood = 1.0
             self._say("bwipe", GHOST_BODY_WIPE, 2.2)
-            memo = "你把她脸上的画擦掉了（互动）"
+            memo = "你把她留在地上的身子脸上的画擦掉了（互动）"
+        elif kind == "note":
+            mk["note"] = random.choice(BODY_NOTES)
+            mood = -2.0
+            self._ghost_react("angry")
+            self._say("bnote", GHOST_BODY_NOTE, 2.6, "alert", fmt=dict(note=mk["note"]))
+            memo = f"你在她留在地上的身子脑门上贴了张纸条「{mk['note']}」，她的魂在旁边气得跺脚（互动）"
+        elif kind == "note_off":
+            mk["note"] = None
+            mood = 1.0
+            self._say("bnoteoff", GHOST_BODY_NOTE_OFF, 2.0)
+            memo = "你把她脑门上的纸条撕掉了（互动）"
         elif kind == "flick":
-            p.mood.add(-1.5, cat="ghost_body")
+            mk["bump"] = min(1.6, mk["bump"] + 0.55)
+            mood = -1.5
+            self._ghost_react("shy")
+            p.sfx.play("tick")
             self._say("bflick", GHOST_BODY_FLICK, 2.2, "alert")
-            memo = "你弹了一下她留在地上的脑门，魂跟着一抽（互动）"
+            memo = "你弹了一下她留在地上的身子的脑门，额头鼓起个包，魂跟着一抽（互动）"
+        elif kind == "tickle":
+            mk["tickle_until"] = t + 1.4
+            mk["tickles"] = [x for x in mk["tickles"] if t - x < 10.0] + [t]
+            if len(mk["tickles"]) >= 3:                     # 连挠三下: 笑够了, 生气
+                mk["tickles"] = []
+                mood = -1.0
+                self._ghost_react("angry", 2.2)
+                self._say("btmad", GHOST_BODY_TICKLE_MAD, 2.6, "alert")
+            else:
+                mood = -0.5
+                self._ghost_react("happy", 1.4)
+                self._say("btickle", GHOST_BODY_TICKLE, 2.0, "happy")
+            memo = "你拿羽毛挠她留在地上的身子，她的魂笑得直打滚（互动）"
+        elif kind == "water":
+            mk["wet"], mk["water_t0"] = 1.0, t
+            mood = -2.0
+            p.sfx.play("whoosh")
+            self._ghost_react("surprised")
+            self._say("bwater", GHOST_BODY_WATER, 2.4, "alert")
+            memo = "你往她留在地上的身子上浇了水，身子湿透了，她的魂急得团团转（互动）"
         elif kind == "crown_off":
-            self.body_tease.add("crown")
-            p.mood.add(-2.0, cat="ghost_body")
+            mk["crown"] = True
+            mood = -2.0
+            self._ghost_react("angry")
             self._say("bcrown", GHOST_BODY_CROWN_OFF, 2.4, "alert")
-            memo = "你把她留在地上的头冠摘了，放在身子旁边（互动）"
-        else:
-            self.body_tease.discard("crown")
-            p.mood.add(1.0, cat="ghost_body")
+            memo = "你把她留在地上的身子的头冠摘了，放在旁边地上（互动）"
+        elif kind == "crown_on":
+            mk["crown"] = False
+            mood = 1.0
             self._say("bcrownon", GHOST_BODY_CROWN_ON, 2.2)
             memo = "你把她的头冠戴回去了（互动）"
+        elif kind == "blanket":
+            mk["blanket"] = True
+            mood = 2.0
+            self._ghost_react("shy", 2.0)
+            self._say("bblanket", GHOST_BODY_BLANKET, 2.6, "happy")
+            memo = "你给她留在地上的身子盖上了小被子，她很感动（互动）"
+        elif kind == "blanket_off":
+            mk["blanket"] = False
+            mood = -0.5
+            self._say("bblanketoff", GHOST_BODY_BLANKET_OFF, 2.0)
+            memo = "你把她身子上的小被子掀开了（互动）"
+        if mood:
+            p.mood.add(mood, cat="ghost_body" if mood > 0 else None)
         b.update()
         p.emit_event("ghost", stage="body", what=kind, memo=memo)
+
+    def _carry_marks(self):
+        """回到身子里那一刻, 身子上被作弄成什么样(带回去的)"""
+        mk, b = self.marks, self.body
+        tiara_at = None
+        if mk["crown"] and self.nocrown_ok():
+            spot = b.tiara_spot()
+            tiara_at = (spot.x(), spot.y() - b.cw * 0.08)
+        return dict(strokes=[list(st) for st in mk["strokes"] if st], bump=mk["bump"], note=mk["note"],
+                    wet=mk["wet"], blanket=mk["blanket"], tiara_at=tiara_at)
+
+    def _bring_back(self, c, delay):
+        """回到身子里: 涂鸦 / 包 / 头冠交给捉弄插件(body_marks 事件), 纸条、湿、被子这边自己演"""
+        p = self.pet
+        if c["strokes"] or c["bump"] > 0.01 or c["tiara_at"]:
+            p.emit_event("body_marks", strokes=c["strokes"], bump=c["bump"], tiara_at=c["tiara_at"], seen=True,
+                         memo="她回到了身子里，身子上被你作弄过的样子她全看见了")
+            if c["strokes"]:
+                delay += 3.6                                # 先让她擦脸、发火
+        if c["note"]:
+            self.after_note = dict(text=c["note"], until=time.monotonic() + delay + 1.4)
+            QTimer.singleShot(int((delay + 1.2) * 1000), lambda: self._tear_note(c["note"]))
+            delay += 3.2
+        if c["wet"] > 0.15:
+            QTimer.singleShot(int(delay * 1000), self._back_wet)
+            delay += 3.0
+        if c["blanket"] and not (c["strokes"] or c["note"] or c["wet"] > 0.15 or c["bump"] > 0.01 or c["tiara_at"]):
+            QTimer.singleShot(int(delay * 1000), self._back_blanket)
+
+    def _tear_note(self, text):
+        p = self.pet
+        self.after_note = None
+        if self.active or not p.isVisible() or p.state == "sleep":
+            return
+        p.set_state("angry", 2.4)
+        p.kick(-1.4)
+        p.sfx.play("hmph")
+        self._say("btear", GHOST_BACK_NOTE, 2.8, "alert", fmt=dict(note=text))
+
+    def _back_wet(self):
+        p = self.pet
+        if self.active or not p.isVisible():
+            return
+        asleep = p.state == "sleep"
+        if not asleep:
+            p.set_state("angry", 2.6, expr="wet" if "wet" in getattr(p, "frames", {}) else None)
+            p.burst("drop", 4, at=p.head_point(), bias=(0, 0))
+            self._say("bwet", GHOST_BACK_WET, 2.8, "alert")
+        p.emit_event("watered", dodged=False, asleep=asleep, body=True,
+                     memo="她回到身子里，发现身子被你浇得湿透了")
+
+    def _back_blanket(self):
+        p = self.pet
+        if self.active or not p.isVisible() or p.state == "sleep":
+            return
+        p.set_state("shy", 2.4)
+        p.burst("heart", 3)
+        p.mood.add(2.0, cat="ghost_body")
+        self._say("bblanketback", GHOST_BACK_BLANKET, 2.8, "happy")
 
     # ----- 附在鼠标上 -----
     def possess_me(self):
@@ -807,7 +1183,18 @@ class Ghost:
 
     def paint(self, key, pm, t):
         if not self.active:
-            return None
+            an = self.after_note
+            if an is None or time.monotonic() >= an["until"]:
+                return None
+            dpr = pm.devicePixelRatio() or 1.0
+            out = QPixmap(pm)
+            out.setDevicePixelRatio(dpr)
+            w, h = pm.width() / dpr, pm.height() / dpr
+            q = QPainter(out)
+            q.setRenderHint(QPainter.Antialiasing, True)
+            paint_note(q, QPointF(BODY_NOTE_SPOT[0] * w, BODY_NOTE_SPOT[1] * h), w, h, an["text"])
+            q.end()
+            return out, 0.0
         a = ALPHA[0] + (ALPHA[1] - ALPHA[0]) * max(0.0, min(1.0, self.amt))
         a = round(a * (1.0 - 0.55 * self.mist), 2)                      # 转成雾: 更淡
         heat = round(self.heat * 5) / 5.0
@@ -1126,6 +1513,8 @@ class Ghost:
                 self._finish(self.home["why"])
             return
         if self.body is not None:
+            if self.marks["wet"] > 0:
+                self.marks["wet"] = max(0.0, self.marks["wet"] - dt / BODY_WET_SEC)
             self.body.update()
         if self.scatter is not None:
             self._scatter_step(t)

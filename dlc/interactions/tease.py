@@ -63,6 +63,7 @@ DOODLE_CAUGHT = ["……嗯?你、你手里拿的什么?!", "!!你在我脸上�
 DOODLE_SELF = ["……脸上怎么黏黏的?", "……?(摸了摸脸, 看了看手)", "……手上怎么有墨……"]
 DOODLE_MIRROR = ["……镜子?给我干嘛……", "嗯?照镜子?"]
 DOODLE_FOUND = ["!!!这、这是什么!!", "我的脸——!!你画了什么!!", "胡、胡子?!你给我站住!!"]
+DOODLE_GHOST = ["你刚才在我身子上画的!!我都看见了!!", "别以为我是魂就看不见!!……擦、擦干净!"]   # 灵魂出窍时画的
 DOODLE_WIPED = ["……哼!洗干净了!", "擦、擦掉了……你给我记住!"]
 GRUDGE_PET = ["哼,别碰我!你手上还有墨!", "不许摸!先把毛笔交出来!", "……(躲开)还记着呢。"]
 STATUS_DRAWING = "睡得正香,浑然不知有人在她脸上作画……"
@@ -560,6 +561,8 @@ class Tease:
             self.dvisit["t0"] = t
         elif name == "danika_end":
             self._danika_after(bool(data.get("skipped")))
+        elif name == "body_marks":                            # 灵魂形态: 她回到身子里, 身子上被作弄的样子带回来
+            self._body_marks(data)
         if name == "wake":
             if self.drawing:
                 self.end_doodle(quiet=True)
@@ -568,6 +571,35 @@ class Tease:
                 self.notice_at = t + random.uniform(*NOTICE_SEC)
         elif name in ("drag_start", "click", "double_click"):
             self.fpend = None
+
+    def _body_marks(self, data):
+        """灵魂形态插件推的 body_marks: 涂鸦(她看见了 -> 马上擦、记仇) / 额头的包 / 头冠掉在地上(她过去捡)"""
+        p = self.pet
+        strokes = [[(float(x), float(y)) for x, y in st] for st in (data.get("strokes") or []) if st]
+        if strokes:
+            self.end_doodle(quiet=True)
+            self.strokes, self.ink, self.caught = strokes, 1.0, False
+            self._cache.clear()
+            if p.state == "sleep":
+                self.doodle = "fresh"
+            else:
+                self.doodle = "wearing"
+                self.notice_at = time.monotonic() + 9999
+                if data.get("seen"):
+                    QTimer.singleShot(1000, lambda: self.doodle == "wearing" and self._found("ghost"))
+        bump = float(data.get("bump") or 0.0)
+        if bump > 0.01:
+            self.bump = max(self.bump, min(1.6, bump))
+            self._cache.clear()
+        at = data.get("tiara_at")
+        if at and self.tiara_ok() and self.tia is None and self.wand is None and p.state != "sleep":
+            w = TiaraWin(self, self.tiara_pm, max(40.0, p.char_w * TIARA_W))
+            w.center_at(QPointF(float(at[0]), float(at[1])))
+            w.show()
+            now = time.monotonic()
+            self.tia = dict(mode="ground", win=w, t0=now, vy=0.0, next=now + 1.5, high=0.0, hop=0.0, sad=False,
+                            said=0.0)
+            p.emit_event("tiara", stage="ground", memo="她回到身子里，头冠还掉在旁边地上")
 
     def on_pet(self):
         p = self.pet
@@ -802,6 +834,8 @@ class Tease:
         p.sfx.play("huh")
         if by == "caught":
             self._say("caught", DOODLE_CAUGHT, 2.6)
+        elif by == "ghost":
+            self._say("fghost", DOODLE_GHOST, 2.6)
         else:
             self._say("found", DOODLE_FOUND, 2.6)
 
@@ -816,8 +850,9 @@ class Tease:
         self._lose("doodle")
         self.grudge_until = t + GRUDGE_SEC
         p.emit_event("doodle", stage="found", by=by,
-                     memo="她发现你在她脸上画了画，气坏了，一边擦一边记仇（互动）" if by != "caught"
-                     else "你在她脸上画画时把她弄醒了，被当场抓包（互动）")
+                     memo={"caught": "你在她脸上画画时把她弄醒了，被当场抓包（互动）",
+                           "ghost": "她灵魂出窍时看着你在她身子脸上画画，回到身子里马上一边擦一边记仇（互动）"}.get(
+                         by, "她发现你在她脸上画了画，气坏了，一边擦一边记仇（互动）"))
 
     def _doodle_step(self, t):
         p = self.pet
