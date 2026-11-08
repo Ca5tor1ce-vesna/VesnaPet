@@ -42,8 +42,8 @@ from collections import deque
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QCursor, QLinearGradient, QPainter, QPixmap, QRadialGradient
-from PySide6.QtWidgets import QWidget
+from PySide6.QtGui import QColor, QCursor, QLinearGradient, QPainter, QPen, QPixmap, QRadialGradient
+from PySide6.QtWidgets import QMenu, QWidget
 
 ASSETS = Path(__file__).resolve().parents[2] / "assets"
 GHOST_SEC = 240.0                    # 浓度从 1 掉到 0 要多久(秒)
@@ -107,6 +107,11 @@ GHOST_UNPOSSESS = {"time": ["玩够了~(从鼠标里飘出来)", "呼,出来透�
 GHOST_EXIT = ["呼~从{where}里钻出来了!", "嘿嘿,{where}里面好挤~"]
 GHOST_BODY_POKE = ["那、那是我的身子!别戳!", "喂!别碰我的身子!", "……(身子被戳了一下,魂这边打了个哆嗦)"]
 GHOST_BODY_MOVED = ["诶!我的身子!别拖走!", "你、你把我的身子藏哪去了?!", "……回头我得去那边找身子了。"]
+GHOST_BODY_DOODLE = ["你、你在我脸上画什么!!我现在擦不到!", "呜哇!脸上……我看见了!快擦掉!", "魂在这儿,脸在那儿……你欺负我!"]
+GHOST_BODY_WIPE = ["……擦掉了就好。别再画了。", "哼,算你还给我擦了。"]
+GHOST_BODY_FLICK = ["呜!弹身子我也会痛!", "……(魂跟着一抽)", "别弹了!我又躲不开!"]
+GHOST_BODY_CROWN_OFF = ["我的头冠!还给我!", "你、你把我的头冠摘了?!"]
+GHOST_BODY_CROWN_ON = ["……哼,算你还回来了。", "头冠回来了……还是别乱摘。"]
 GHOST_STOVE = ["呜哇,热气把我往上托——……诶?变、变成青色的了?!", "火炉边好暖……整个人都映成青色了~"]
 GHOST_BOO = ["哇!!", "嘿!!"]
 GHOST_BOO_AFTER = ["嘿嘿,吓到了吧~", "……你怎么一点都不怕啊。"]
@@ -221,6 +226,21 @@ class BodyWin(QWidget):
         q.translate(self.pivot.x() + jit, self.pivot.y())
         q.rotate(BODY_TILT * self.side)
         q.drawPixmap(QRectF(-self.cw / 2, -self.ch, self.cw, self.ch), self.pm, QRectF(self.pm.rect()))
+        marks = getattr(self.plug, "body_tease", ())
+        if "doodle" in marks:                            # 脸上的一笔, 跟着身子倒着
+            q.setPen(QPen(QColor(226, 72, 122), 3))
+            y = -self.ch * 0.72
+            x = -self.cw * 0.06
+            q.drawLine(QPointF(x - 8, y - 6), QPointF(x + 10, y + 7))
+            q.drawLine(QPointF(x + 10, y - 6), QPointF(x - 8, y + 7))
+        if "crown" in marks:                             # 摘下来的小头冠, 放在身子旁边
+            q.setPen(Qt.NoPen)
+            q.setBrush(QColor(255, 214, 90))
+            cx = self.side * self.cw * 0.62
+            cy = -self.ch * 0.08
+            q.drawRect(QRectF(cx - 9, cy - 4, 18, 7))
+            q.drawPolygon([QPointF(cx - 9, cy - 4), QPointF(cx - 5, cy - 14), QPointF(cx - 1, cy - 4)])
+            q.drawPolygon([QPointF(cx - 1, cy - 4), QPointF(cx + 4, cy - 16), QPointF(cx + 9, cy - 4)])
         q.end()
 
     def mousePressEvent(self, e):
@@ -246,6 +266,7 @@ class BodyWin(QWidget):
         e.accept()
 
     def contextMenuEvent(self, e):
+        self.plug.body_menu(e.globalPos())
         e.accept()
 
 
@@ -317,6 +338,7 @@ class Ghost:
         self.boo_cool = 0.0
         self.cur_d = None                    # 上一帧鼠标离她多远(立绘宽的倍数)
         self.say_cool = self.body_cool = 0.0
+        self.body_tease = set()             # 留在地上的身子被作弄过: doodle / crown
         self._last = {}
         self._cache = {}
         self._blank_pm = None
@@ -463,6 +485,7 @@ class Ghost:
         b.place_foot(f)
         b.show()
         self.body = b
+        self.body_tease = set()
 
     def _remove_body(self):
         b, self.body = self.body, None
@@ -499,6 +522,55 @@ class Ghost:
             self._say("bmove", GHOST_BODY_MOVED, 2.4, "alert")
         p.emit_event("ghost", stage="body", what="moved", far=round(d, 1),
                      memo="你把她留在地上的身子拖走藏了起来（互动）" if d > 2.0 else None)
+
+    def body_menu(self, gpos):
+        """右键留在地上的身子, 跟雪人一样作弄"""
+        if self.body is None:
+            return
+        m = QMenu()
+        if "doodle" in self.body_tease:
+            m.addAction("🧻 把脸上的画擦掉").triggered.connect(lambda: self._body_tease("wipe"))
+        else:
+            m.addAction("😜 在脸上画一笔").triggered.connect(lambda: self._body_tease("doodle"))
+        m.addAction("👋 弹一下脑门").triggered.connect(lambda: self._body_tease("flick"))
+        if "crown" in self.body_tease:
+            m.addAction("👑 把头冠戴回去").triggered.connect(lambda: self._body_tease("crown_on"))
+        else:
+            m.addAction("👑 摘掉头冠").triggered.connect(lambda: self._body_tease("crown_off"))
+        m.exec(gpos)
+
+    def _body_tease(self, kind):
+        b, p = self.body, self.pet
+        if b is None or not self.active:
+            return
+        p.note_interaction()
+        b.shake_until = time.monotonic() + (0.7 if kind == "flick" else 0.4)
+        if kind == "doodle":
+            self.body_tease.add("doodle")
+            p.mood.add(-2.0, cat="ghost_body")
+            self._say("bdoodle", GHOST_BODY_DOODLE, 2.6, "alert")
+            memo = "你在她留在地上的脸上画了一笔，魂急得擦不到（互动）"
+        elif kind == "wipe":
+            self.body_tease.discard("doodle")
+            p.mood.add(1.0, cat="ghost_body")
+            self._say("bwipe", GHOST_BODY_WIPE, 2.2)
+            memo = "你把她脸上的画擦掉了（互动）"
+        elif kind == "flick":
+            p.mood.add(-1.5, cat="ghost_body")
+            self._say("bflick", GHOST_BODY_FLICK, 2.2, "alert")
+            memo = "你弹了一下她留在地上的脑门，魂跟着一抽（互动）"
+        elif kind == "crown_off":
+            self.body_tease.add("crown")
+            p.mood.add(-2.0, cat="ghost_body")
+            self._say("bcrown", GHOST_BODY_CROWN_OFF, 2.4, "alert")
+            memo = "你把她留在地上的头冠摘了，放在身子旁边（互动）"
+        else:
+            self.body_tease.discard("crown")
+            p.mood.add(1.0, cat="ghost_body")
+            self._say("bcrownon", GHOST_BODY_CROWN_ON, 2.2)
+            memo = "你把她的头冠戴回去了（互动）"
+        b.update()
+        p.emit_event("ghost", stage="body", what=kind, memo=memo)
 
     # ----- 附在鼠标上 -----
     def possess_me(self):
